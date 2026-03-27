@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">pypyradio</string>
+    <string name="notif_channel_name">Playback</string>
+</resources>
