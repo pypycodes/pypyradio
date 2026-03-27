@@ -27,8 +27,8 @@ android {
         applicationId = "com.pypyradio.aacplayer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 22
-        versionName = "1.0.22"
+        versionCode = 23
+        versionName = "1.0.23"
     }
 
     signingConfigs {
@@ -62,6 +62,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -77,13 +78,38 @@ android {
         jvmTarget = "17"
     }
 
-    // Output APK to app/release folder
+    // Output APK with versioned filename
     applicationVariants.all {
         val variant = this
         variant.outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
             if (variant.buildType.name == "release") {
                 output.outputFileName = "pypyradio-${variant.versionName}.apk"
+            }
+        }
+    }
+    
+    // Set AAB bundle filename with version
+    bundle {
+        storeArchive {
+            enable = true
+        }
+    }
+}
+
+// Rename AAB after build
+tasks.whenTaskAdded {
+    if (name == "bundleRelease") {
+        doLast {
+            val bundleDir = file("${project.layout.buildDirectory.get()}/outputs/bundle/release")
+            val versionName = android.defaultConfig.versionName
+            bundleDir.listFiles()?.filter { it.extension == "aab" }?.forEach { aab ->
+                val newName = "pypyradio-${versionName}.aab"
+                val newFile = File(bundleDir, newName)
+                if (aab.name != newName) {
+                    aab.renameTo(newFile)
+                    println("Renamed AAB to: $newName")
+                }
             }
         }
     }
