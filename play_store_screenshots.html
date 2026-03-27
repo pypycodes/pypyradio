@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AAC Radio - Play Store Screenshots Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 { color: #B388FF; }
+        h2 { color: #7C4DFF; margin-top: 40px; border-bottom: 2px solid #7C4DFF; padding-bottom: 10px; }
+        h3 { color: #9C6AFF; }
+        .screenshot-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .screenshot-container {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        canvas {
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #7C4DFF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #B388FF; }
+        .info { color: #888; font-size: 12px; margin-top: 8px; }
+        .specs { 
+            background: #0f0f23; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        .specs h4 { color: #B388FF; margin-top: 0; }
+        .specs ul { margin: 5px 0; }
+        .download-all {
+            background: #4CAF50;
+            padding: 15px 30px;
+            font-size: 18px;
+            margin: 20px;
+        }
+        .download-all:hover { background: #66BB6A; }
+    </style>
+</head>
+<body>
+    <h1>🎵 AAC Mix Radio Player</h1>
+    <p>Play Store Screenshots Generator</p>
+
+    <div class="specs">
+        <h4>📱 Google Play Store Screenshot Requirements:</h4>
+        <ul>
+            <li><strong>Phone:</strong> 1080 x 1920 pixels (or 1920 x 1080 landscape)</li>
+            <li><strong>7-inch Tablet:</strong> 1200 x 1920 pixels (or 1920 x 1200 landscape)</li>
+            <li><strong>10-inch Tablet:</strong> 1600 x 2560 pixels (or 2560 x 1600 landscape)</li>
+        </ul>
+    </div>
+
+    <button class="download-all" onclick="downloadAll()">⬇️ Download All Screenshots (6 files)</button>
+
+    <!-- PHONE SCREENSHOTS -->
+    <h2>📱 Phone Screenshots (1080 x 1920)</h2>
+    <div class="screenshot-row">
+        <div class="screenshot-container">
+            <h3>Home Screen</h3>
+            <canvas id="phone1" width="1080" height="1920"></canvas>
+            <br><button onclick="download('phone1', 'phone_screenshot_1_home.png')">⬇️ Download</button>
+            <p class="info">1080 x 1920 PNG</p>
+        </div>
+        <div class="screenshot-container">
+            <h3>Now Playing</h3>
+            <canvas id="phone2" width="1080" height="1920"></canvas>
+            <br><button onclick="download('phone2', 'phone_screenshot_2_playing.png')">⬇️ Download</button>
+            <p class="info">1080 x 1920 PNG</p>
+        </div>
+    </div>
+
+    <!-- 7-INCH TABLET SCREENSHOTS -->
+    <h2>📱 7-inch Tablet Screenshots (1200 x 1920)</h2>
+    <div class="screenshot-row">
+        <div class="screenshot-container">
+            <h3>Browse Stations</h3>
+            <canvas id="tablet7_1" width="1200" height="1920"></canvas>
+            <br><button onclick="download('tablet7_1', 'tablet_7inch_screenshot_1_browse.png')">⬇️ Download</button>
+            <p class="info">1200 x 1920 PNG</p>
+        </div>
+        <div class="screenshot-container">
+            <h3>Favorites</h3>
+            <canvas id="tablet7_2" width="1200" height="1920"></canvas>
+            <br><button onclick="download('tablet7_2', 'tablet_7inch_screenshot_2_favorites.png')">⬇️ Download</button>
+            <p class="info">1200 x 1920 PNG</p>
+        </div>
+    </div>
+
+    <!-- 10-INCH TABLET SCREENSHOTS -->
+    <h2>💻 10-inch Tablet Screenshots (1600 x 2560)</h2>
+    <div class="screenshot-row">
+        <div class="screenshot-container">
+            <h3>Station List</h3>
+            <canvas id="tablet10_1" width="1600" height="2560"></canvas>
+            <br><button onclick="download('tablet10_1', 'tablet_10inch_screenshot_1_stations.png')">⬇️ Download</button>
+            <p class="info">1600 x 2560 PNG</p>
+        </div>
+        <div class="screenshot-container">
+            <h3>Categories</h3>
+            <canvas id="tablet10_2" width="1600" height="2560"></canvas>
+            <br><button onclick="download('tablet10_2', 'tablet_10inch_screenshot_2_categories.png')">⬇️ Download</button>
+            <p class="info">1600 x 2560 PNG</p>
+        </div>
+    </div>
+
+    <script>
+        const stations = [
+            { name: 'BBC Radio 1', country: '🇬🇧 UK', genre: 'Pop', playing: true },
+            { name: 'NPR News', country: '🇺🇸 USA', genre: 'News', playing: false },
+            { name: 'Radio Mirchi', country: '🇮🇳 India', genre: 'Bollywood', playing: false },
+            { name: 'NRJ France', country: '🇫🇷 France', genre: 'Hits', playing: false },
+            { name: 'Klassik Radio', country: '🇩🇪 Germany', genre: 'Classical', playing: false },
+            { name: 'Triple J', country: '🇦🇺 Australia', genre: 'Alternative', playing: false },
+            { name: 'Radio Swiss Jazz', country: '🇨🇭 Switzerland', genre: 'Jazz', playing: false },
+            { name: 'RFI Monde', country: '🇫🇷 France', genre: 'World', playing: false },
+            { name: 'All India Radio', country: '🇮🇳 India', genre: 'News', playing: false },
+            { name: 'Capital FM', country: '🇬🇧 UK', genre: 'Pop', playing: false },
+            { name: 'KEXP Seattle', country: '🇺🇸 USA', genre: 'Indie', playing: false },
+            { name: 'Radio Paradise', country: '🇺🇸 USA', genre: 'Eclectic', playing: false },
+        ];
+
+        const categories = ['🔝 Top Stations', '🇮🇳 India', '🇺🇸 USA', '🇬🇧 UK', '📰 News', '🎵 Music', '🎭 Talk', '⚽ Sports'];
+        const genres = ['Pop', 'Rock', 'Jazz', 'Classical', 'News', 'Talk', 'Sports', 'Bollywood', 'Hip Hop', 'Electronic'];
+
+        // Common drawing functions
+        function drawStatusBar(ctx, width, dark = true) {
+            ctx.fillStyle = dark ? '#1a1a2e' : '#7C4DFF';
+            ctx.fillRect(0, 0, width, 80);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 28px Segoe UI';
+            ctx.fillText('9:41', 40, 52);
+            ctx.fillText('🔋 85%', width - 140, 52);
+            ctx.fillText('📶', width - 220, 52);
+        }
+
+        function drawAppBar(ctx, width, y, title, showBack = false) {
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, y, width, 120);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 42px Segoe UI';
+            const textX = showBack ? 120 : 40;
+            ctx.fillText(title, textX, y + 75);
+            if (showBack) {
+                ctx.font = '48px Segoe UI';
+                ctx.fillText('←', 40, y + 78);
+            }
+            // Icons on right
+            ctx.font = '36px Segoe UI';
+            ctx.fillText('❤️', width - 180, y + 75);
+            ctx.fillText('ℹ️', width - 100, y + 75);
+        }
+
+        function drawStationCard(ctx, x, y, width, height, station, scale = 1) {
+            // Card background
+            ctx.fillStyle = station.playing ? '#2d1f5e' : '#16213e';
+            ctx.beginPath();
+            ctx.roundRect(x, y, width, height, 16 * scale);
+            ctx.fill();
+
+            if (station.playing) {
+                ctx.strokeStyle = '#7C4DFF';
+                ctx.lineWidth = 3 * scale;
+                ctx.stroke();
+            }
+
+            // Station icon circle
+            ctx.beginPath();
+            ctx.arc(x + 50 * scale, y + height/2, 30 * scale, 0, Math.PI * 2);
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.font = `${24 * scale}px Segoe UI`;
+            ctx.fillText('▶', x + 38 * scale, y + height/2 + 8 * scale);
+
+            // Station name
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${28 * scale}px Segoe UI`;
+            ctx.fillText(station.name, x + 100 * scale, y + height/2 - 10 * scale);
+
+            // Country and genre
+            ctx.fillStyle = '#888';
+            ctx.font = `${22 * scale}px Segoe UI`;
+            ctx.fillText(`${station.country} • ${station.genre}`, x + 100 * scale, y + height/2 + 25 * scale);
+
+            // Favorite icon
+            ctx.font = `${28 * scale}px Segoe UI`;
+            ctx.fillText('♡', x + width - 50 * scale, y + height/2 + 10 * scale);
+        }
+
+        function drawNowPlayingBar(ctx, width, y, height, station) {
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, y, width, height);
+
+            // Progress bar
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, y, width, 4);
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, y, width * 0.6, 4);
+
+            const scale = height / 140;
+            
+            // Station info
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${28 * scale}px Segoe UI`;
+            ctx.fillText(station.name, 30, y + 50 * scale);
+            ctx.fillStyle = '#B388FF';
+            ctx.font = `${22 * scale}px Segoe UI`;
+            ctx.fillText('Playing • ' + station.genre, 30, y + 85 * scale);
+
+            // Controls
+            ctx.fillStyle = 'white';
+            ctx.font = `${40 * scale}px Segoe UI`;
+            ctx.fillText('⏮', width - 220 * scale, y + 70 * scale);
+            ctx.fillText('⏸', width - 140 * scale, y + 70 * scale);
+            ctx.fillText('⏭', width - 60 * scale, y + 70 * scale);
+        }
+
+        function drawTabs(ctx, width, y, tabs, activeIndex, scale = 1) {
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, y, width, 80 * scale);
+            
+            const tabWidth = width / tabs.length;
+            tabs.forEach((tab, i) => {
+                ctx.fillStyle = i === activeIndex ? '#B388FF' : '#666';
+                ctx.font = `${24 * scale}px Segoe UI`;
+                ctx.textAlign = 'center';
+                ctx.fillText(tab, tabWidth * i + tabWidth/2, y + 50 * scale);
+                
+                if (i === activeIndex) {
+                    ctx.fillStyle = '#7C4DFF';
+                    ctx.fillRect(tabWidth * i + 20, y + 70 * scale, tabWidth - 40, 4 * scale);
+                }
+            });
+            ctx.textAlign = 'left';
+        }
+
+        function drawCategoryChips(ctx, x, y, width, scale = 1) {
+            let chipX = x;
+            let chipY = y;
+            categories.forEach((cat, i) => {
+                const chipWidth = ctx.measureText(cat).width + 40 * scale;
+                if (chipX + chipWidth > width - 20) {
+                    chipX = x;
+                    chipY += 60 * scale;
+                }
+                
+                ctx.fillStyle = i === 0 ? '#7C4DFF' : '#16213e';
+                ctx.beginPath();
+                ctx.roundRect(chipX, chipY, chipWidth, 45 * scale, 22 * scale);
+                ctx.fill();
+                
+                ctx.fillStyle = 'white';
+                ctx.font = `${22 * scale}px Segoe UI`;
+                ctx.fillText(cat, chipX + 20 * scale, chipY + 30 * scale);
+                
+                chipX += chipWidth + 15 * scale;
+            });
+            return chipY + 70 * scale;
+        }
+
+        // PHONE SCREENSHOT 1 - Home Screen
+        function drawPhone1() {
+            const canvas = document.getElementById('phone1');
+            const ctx = canvas.getContext('2d');
+            const w = 1080, h = 1920;
+
+            // Background
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w);
+            drawAppBar(ctx, w, 80, '🎵 AAC Mix Radio');
+
+            // Tabs
+            drawTabs(ctx, w, 200, ['Top', 'Countries', 'Genres', 'Search'], 0);
+
+            // Category chips
+            ctx.font = '22px Segoe UI';
+            const nextY = drawCategoryChips(ctx, 30, 310, w);
+
+            // Station count
+            ctx.fillStyle = '#888';
+            ctx.font = '24px Segoe UI';
+            ctx.fillText('30,000+ stations available', 30, nextY + 20);
+
+            // Station list
+            let cardY = nextY + 60;
+            stations.slice(0, 8).forEach((station, i) => {
+                drawStationCard(ctx, 30, cardY, w - 60, 120, {...station, playing: i === 0});
+                cardY += 140;
+            });
+
+            // Now playing bar
+            drawNowPlayingBar(ctx, w, h - 160, 160, stations[0]);
+        }
+
+        // PHONE SCREENSHOT 2 - Now Playing
+        function drawPhone2() {
+            const canvas = document.getElementById('phone2');
+            const ctx = canvas.getContext('2d');
+            const w = 1080, h = 1920;
+
+            // Gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, h);
+            gradient.addColorStop(0, '#7C4DFF');
+            gradient.addColorStop(0.5, '#3d2a7c');
+            gradient.addColorStop(1, '#0f0f23');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w, false);
+
+            // Back button and title
+            ctx.fillStyle = 'white';
+            ctx.font = '48px Segoe UI';
+            ctx.fillText('←', 40, 160);
+            ctx.font = 'bold 36px Segoe UI';
+            ctx.fillText('Now Playing', w/2 - 100, 160);
+
+            // Large album art / station icon
+            ctx.beginPath();
+            ctx.arc(w/2, 550, 200, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(w/2, 550, 150, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.font = '120px Segoe UI';
+            ctx.fillText('🎵', w/2 - 60, 590);
+
+            // Station name
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 56px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText('BBC Radio 1', w/2, 850);
+
+            // Genre and country
+            ctx.fillStyle = '#B388FF';
+            ctx.font = '32px Segoe UI';
+            ctx.fillText('Pop • 🇬🇧 United Kingdom', w/2, 910);
+
+            // Status
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = '28px Segoe UI';
+            ctx.fillText('● Playing', w/2, 970);
+
+            // Waveform visualization
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            for (let i = 0; i < 40; i++) {
+                const barHeight = 30 + Math.random() * 80;
+                ctx.fillRect(140 + i * 20, 1100 - barHeight/2, 12, barHeight);
+            }
+
+            // Progress bar
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fillRect(100, 1200, w - 200, 8);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(100, 1200, (w - 200) * 0.6, 8);
+
+            // Time
+            ctx.fillStyle = '#888';
+            ctx.font = '24px Segoe UI';
+            ctx.textAlign = 'left';
+            ctx.fillText('LIVE', 100, 1250);
+            ctx.textAlign = 'right';
+            ctx.fillText('∞', w - 100, 1250);
+            ctx.textAlign = 'center';
+
+            // Large controls
+            ctx.fillStyle = 'white';
+            ctx.font = '80px Segoe UI';
+            ctx.fillText('⏮', w/2 - 200, 1420);
+            
+            // Play/Pause button with circle
+            ctx.beginPath();
+            ctx.arc(w/2, 1380, 80, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.fillStyle = '#7C4DFF';
+            ctx.font = '70px Segoe UI';
+            ctx.fillText('⏸', w/2, 1405);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '80px Segoe UI';
+            ctx.fillText('⏭', w/2 + 200, 1420);
+
+            // Bottom actions
+            ctx.font = '40px Segoe UI';
+            ctx.fillText('❤️', w/2 - 150, 1600);
+            ctx.fillText('🔀', w/2, 1600);
+            ctx.fillText('📋', w/2 + 150, 1600);
+
+            // Favorite status
+            ctx.fillStyle = '#B388FF';
+            ctx.font = '24px Segoe UI';
+            ctx.fillText('Added to Favorites', w/2, 1700);
+
+            ctx.textAlign = 'left';
+        }
+
+        // 7-INCH TABLET SCREENSHOT 1 - Browse
+        function drawTablet7_1() {
+            const canvas = document.getElementById('tablet7_1');
+            const ctx = canvas.getContext('2d');
+            const w = 1200, h = 1920;
+            const scale = 1.1;
+
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w);
+            drawAppBar(ctx, w, 80, '🎵 AAC Mix Radio');
+            drawTabs(ctx, w, 200, ['Top', 'Countries', 'Genres', 'Search'], 1, scale);
+
+            // Section title
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 36px Segoe UI';
+            ctx.fillText('Browse by Country', 40, 360);
+
+            // Country grid
+            const countries = [
+                { flag: '🇮🇳', name: 'India', count: '2,500+' },
+                { flag: '🇺🇸', name: 'USA', count: '5,000+' },
+                { flag: '🇬🇧', name: 'UK', count: '1,200+' },
+                { flag: '🇩🇪', name: 'Germany', count: '800+' },
+                { flag: '🇫🇷', name: 'France', count: '600+' },
+                { flag: '🇯🇵', name: 'Japan', count: '400+' },
+                { flag: '🇧🇷', name: 'Brazil', count: '700+' },
+                { flag: '🇦🇺', name: 'Australia', count: '350+' },
+            ];
+
+            let gridX = 40, gridY = 400;
+            const cardW = 260, cardH = 160;
+            countries.forEach((country, i) => {
+                if (i > 0 && i % 4 === 0) {
+                    gridX = 40;
+                    gridY += cardH + 20;
+                }
+
+                ctx.fillStyle = i === 0 ? '#2d1f5e' : '#16213e';
+                ctx.beginPath();
+                ctx.roundRect(gridX, gridY, cardW, cardH, 16);
+                ctx.fill();
+
+                if (i === 0) {
+                    ctx.strokeStyle = '#7C4DFF';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                ctx.font = '60px Segoe UI';
+                ctx.fillText(country.flag, gridX + 20, gridY + 70);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 28px Segoe UI';
+                ctx.fillText(country.name, gridX + 100, gridY + 60);
+                ctx.fillStyle = '#888';
+                ctx.font = '22px Segoe UI';
+                ctx.fillText(country.count + ' stations', gridX + 100, gridY + 95);
+
+                gridX += cardW + 20;
+            });
+
+            // Popular stations section
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 36px Segoe UI';
+            ctx.fillText('Popular in India', 40, gridY + 260);
+
+            let cardY = gridY + 300;
+            stations.filter(s => s.country.includes('India')).concat(stations.slice(0, 4)).slice(0, 6).forEach((station, i) => {
+                drawStationCard(ctx, 40, cardY, w - 80, 130, {...station, playing: i === 0}, scale);
+                cardY += 150;
+            });
+
+            drawNowPlayingBar(ctx, w, h - 180, 180, stations.find(s => s.country.includes('India')) || stations[0]);
+        }
+
+        // 7-INCH TABLET SCREENSHOT 2 - Favorites
+        function drawTablet7_2() {
+            const canvas = document.getElementById('tablet7_2');
+            const ctx = canvas.getContext('2d');
+            const w = 1200, h = 1920;
+            const scale = 1.1;
+
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w);
+            drawAppBar(ctx, w, 80, '❤️ Favorites (12)', true);
+
+            // Empty state message or favorites list
+            ctx.fillStyle = '#888';
+            ctx.font = '28px Segoe UI';
+            ctx.fillText('Your favorite stations for quick access', 120, 260);
+
+            let cardY = 300;
+            const favoriteStations = stations.map((s, i) => ({...s, playing: i === 2}));
+            favoriteStations.forEach((station, i) => {
+                if (cardY > h - 300) return;
+                
+                // Card with filled heart
+                ctx.fillStyle = station.playing ? '#2d1f5e' : '#16213e';
+                ctx.beginPath();
+                ctx.roundRect(40, cardY, w - 80, 130 * scale, 16);
+                ctx.fill();
+
+                if (station.playing) {
+                    ctx.strokeStyle = '#7C4DFF';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                ctx.beginPath();
+                ctx.arc(40 + 55 * scale, cardY + 65 * scale, 35 * scale, 0, Math.PI * 2);
+                ctx.fillStyle = '#7C4DFF';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = `${28 * scale}px Segoe UI`;
+                ctx.fillText('▶', 40 + 40 * scale, cardY + 75 * scale);
+
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${30 * scale}px Segoe UI`;
+                ctx.fillText(station.name, 40 + 110 * scale, cardY + 55 * scale);
+                ctx.fillStyle = '#888';
+                ctx.font = `${24 * scale}px Segoe UI`;
+                ctx.fillText(`${station.country} • ${station.genre}`, 40 + 110 * scale, cardY + 95 * scale);
+
+                // Filled heart for favorites
+                ctx.fillStyle = '#FF4081';
+                ctx.font = `${32 * scale}px Segoe UI`;
+                ctx.fillText('❤️', w - 100, cardY + 75 * scale);
+
+                cardY += 150 * scale;
+            });
+
+            drawNowPlayingBar(ctx, w, h - 180, 180, stations[2]);
+        }
+
+        // 10-INCH TABLET SCREENSHOT 1 - Station List
+        function drawTablet10_1() {
+            const canvas = document.getElementById('tablet10_1');
+            const ctx = canvas.getContext('2d');
+            const w = 1600, h = 2560;
+            const scale = 1.4;
+
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w);
+            
+            // Larger app bar
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, 80, w, 140);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 52px Segoe UI';
+            ctx.fillText('🎵 AAC Mix Radio', 50, 170);
+            ctx.font = '44px Segoe UI';
+            ctx.fillText('❤️', w - 220, 170);
+            ctx.fillText('⚙️', w - 120, 170);
+
+            drawTabs(ctx, w, 220, ['Top', 'Countries', 'Genres', 'Search'], 0, scale);
+
+            // Stats bar
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 340, w, 100);
+            ctx.fillStyle = 'white';
+            ctx.font = '28px Segoe UI';
+            ctx.fillText('📻 30,847 stations', 50, 400);
+            ctx.fillText('🌍 195 countries', 350, 400);
+            ctx.fillText('🎵 500+ genres', 650, 400);
+            ctx.fillText('🔴 Live streaming', 950, 400);
+
+            // Category chips
+            ctx.font = `${26 * scale}px Segoe UI`;
+            drawCategoryChips(ctx, 50, 470, w, scale);
+
+            // Station list with larger cards
+            let cardY = 650;
+            stations.forEach((station, i) => {
+                if (cardY > h - 350) return;
+                drawStationCard(ctx, 50, cardY, w - 100, 150 * scale, {...station, playing: i === 0}, scale);
+                cardY += 170 * scale;
+            });
+
+            // Now playing bar
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, h - 220, w, 220);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, h - 220, w, 6);
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, h - 220, w * 0.45, 6);
+
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 36px Segoe UI';
+            ctx.fillText(stations[0].name, 50, h - 140);
+            ctx.fillStyle = '#B388FF';
+            ctx.font = '28px Segoe UI';
+            ctx.fillText('Playing • ' + stations[0].genre + ' • ' + stations[0].country, 50, h - 90);
+
+            ctx.fillStyle = 'white';
+            ctx.font = '56px Segoe UI';
+            ctx.fillText('⏮', w - 300, h - 100);
+            ctx.fillText('⏸', w - 200, h - 100);
+            ctx.fillText('⏭', w - 100, h - 100);
+        }
+
+        // 10-INCH TABLET SCREENSHOT 2 - Categories/Genres
+        function drawTablet10_2() {
+            const canvas = document.getElementById('tablet10_2');
+            const ctx = canvas.getContext('2d');
+            const w = 1600, h = 2560;
+            const scale = 1.4;
+
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, w, h);
+
+            drawStatusBar(ctx, w);
+            
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, 80, w, 140);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 52px Segoe UI';
+            ctx.fillText('🎵 AAC Mix Radio', 50, 170);
+
+            drawTabs(ctx, w, 220, ['Top', 'Countries', 'Genres', 'Search'], 2, scale);
+
+            // Genre title
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 44px Segoe UI';
+            ctx.fillText('Browse by Genre', 50, 420);
+
+            // Genre grid
+            const genreData = [
+                { icon: '🎵', name: 'Pop', count: '5,200+', color: '#E91E63' },
+                { icon: '🎸', name: 'Rock', count: '4,100+', color: '#FF5722' },
+                { icon: '🎷', name: 'Jazz', count: '1,800+', color: '#9C27B0' },
+                { icon: '🎻', name: 'Classical', count: '1,200+', color: '#3F51B5' },
+                { icon: '📰', name: 'News', count: '3,500+', color: '#2196F3' },
+                { icon: '🎙️', name: 'Talk', count: '2,800+', color: '#00BCD4' },
+                { icon: '⚽', name: 'Sports', count: '900+', color: '#4CAF50' },
+                { icon: '🎬', name: 'Bollywood', count: '1,500+', color: '#FF9800' },
+                { icon: '🎤', name: 'Hip Hop', count: '2,200+', color: '#795548' },
+                { icon: '🎹', name: 'Electronic', count: '3,100+', color: '#607D8B' },
+                { icon: '🌍', name: 'World', count: '2,400+', color: '#8BC34A' },
+                { icon: '✝️', name: 'Religious', count: '1,900+', color: '#FFC107' },
+            ];
+
+            let gridX = 50, gridY = 480;
+            const cardW = 360, cardH = 200;
+            genreData.forEach((genre, i) => {
+                if (i > 0 && i % 4 === 0) {
+                    gridX = 50;
+                    gridY += cardH + 30;
+                }
+
+                // Card with gradient
+                const gradient = ctx.createLinearGradient(gridX, gridY, gridX + cardW, gridY + cardH);
+                gradient.addColorStop(0, genre.color + '40');
+                gradient.addColorStop(1, '#16213e');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.roundRect(gridX, gridY, cardW, cardH, 20);
+                ctx.fill();
+
+                ctx.font = '72px Segoe UI';
+                ctx.fillText(genre.icon, gridX + 30, gridY + 90);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 36px Segoe UI';
+                ctx.fillText(genre.name, gridX + 30, gridY + 150);
+                
+                ctx.fillStyle = '#888';
+                ctx.font = '26px Segoe UI';
+                ctx.fillText(genre.count + ' stations', gridX + 30, gridY + 185);
+
+                gridX += cardW + 30;
+            });
+
+            // Featured section
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 44px Segoe UI';
+            ctx.fillText('🔥 Trending Now', 50, gridY + 320);
+
+            let cardY = gridY + 370;
+            stations.slice(0, 4).forEach((station, i) => {
+                drawStationCard(ctx, 50, cardY, w - 100, 150 * scale, {...station, playing: i === 0}, scale);
+                cardY += 170 * scale;
+            });
+
+            // Now playing bar
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, h - 220, w, 220);
+            ctx.fillStyle = '#7C4DFF';
+            ctx.fillRect(0, h - 220, w * 0.3, 6);
+
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 36px Segoe UI';
+            ctx.fillText(stations[0].name, 50, h - 140);
+            ctx.fillStyle = '#B388FF';
+            ctx.font = '28px Segoe UI';
+            ctx.fillText('Playing • ' + stations[0].genre, 50, h - 90);
+
+            ctx.fillStyle = 'white';
+            ctx.font = '56px Segoe UI';
+            ctx.fillText('⏮', w - 300, h - 100);
+            ctx.fillText('⏸', w - 200, h - 100);
+            ctx.fillText('⏭', w - 100, h - 100);
+        }
+
+        // Download function
+        function download(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Download all
+        function downloadAll() {
+            const files = [
+                ['phone1', 'phone_screenshot_1_home.png'],
+                ['phone2', 'phone_screenshot_2_playing.png'],
+                ['tablet7_1', 'tablet_7inch_screenshot_1_browse.png'],
+                ['tablet7_2', 'tablet_7inch_screenshot_2_favorites.png'],
+                ['tablet10_1', 'tablet_10inch_screenshot_1_stations.png'],
+                ['tablet10_2', 'tablet_10inch_screenshot_2_categories.png'],
+            ];
+            
+            files.forEach((file, i) => {
+                setTimeout(() => download(file[0], file[1]), i * 500);
+            });
+        }
+
+        // Draw all on load
+        window.onload = function() {
+            // Add roundRect polyfill if needed
+            if (!CanvasRenderingContext2D.prototype.roundRect) {
+                CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                    if (w < 2 * r) r = w / 2;
+                    if (h < 2 * r) r = h / 2;
+                    this.moveTo(x + r, y);
+                    this.arcTo(x + w, y, x + w, y + h, r);
+                    this.arcTo(x + w, y + h, x, y + h, r);
+                    this.arcTo(x, y + h, x, y, r);
+                    this.arcTo(x, y, x + w, y, r);
+                    this.closePath();
+                };
+            }
+
+            drawPhone1();
+            drawPhone2();
+            drawTablet7_1();
+            drawTablet7_2();
+            drawTablet10_1();
+            drawTablet10_2();
+        };
+    </script>
+</body>
+</html>

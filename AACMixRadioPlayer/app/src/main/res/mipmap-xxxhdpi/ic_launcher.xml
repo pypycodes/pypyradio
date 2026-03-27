@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Background - purple -->
+    <path
+        android:fillColor="#7C4DFF"
+        android:pathData="M0,0h48v48H0z"/>
+    <!-- Inner circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,18m-6,0a6,6 0,1,1 12,0a6,6 0,1,1 -12,0"/>
+    <!-- Play triangle -->
+    <path
+        android:fillColor="#7C4DFF"
+        android:pathData="M22,15l7,3l-7,3z"/>
+    <!-- Wave 1 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,28c4,0 7,3 7,7H17c0,-4 3,-7 7,-7z"/>
+    <!-- Wave 2 -->
+    <path
+        android:fillColor="#B388FF"
+        android:pathData="M24,32c2.5,0 4.5,2 4.5,4.5H19.5c0,-2.5 2,-4.5 4.5,-4.5z"/>
+    <!-- Wave 3 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,36c1.5,0 2.5,1 2.5,2.5h-5c0,-1.5 1,-2.5 2.5,-2.5z"/>
+</vector>

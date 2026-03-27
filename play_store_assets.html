@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AAC Radio - Play Store Assets Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        h1 { color: #B388FF; }
+        h2 { color: #7C4DFF; margin-top: 40px; }
+        .asset-container {
+            display: inline-block;
+            margin: 20px;
+            background: #16213e;
+            padding: 20px;
+            border-radius: 16px;
+        }
+        canvas {
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(124, 77, 255, 0.3);
+        }
+        button {
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: #7C4DFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #B388FF;
+        }
+        .info {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .instructions {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 30px auto;
+            max-width: 600px;
+            text-align: left;
+        }
+        .instructions li {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 AAC Mix Radio Player</h1>
+    <p>Play Store Assets Generator</p>
+
+    <div class="instructions">
+        <h3>📋 Instructions:</h3>
+        <ol>
+            <li>Click the <strong>"Download"</strong> button below each image</li>
+            <li>Upload <strong>App Icon (512x512)</strong> to Play Console → Store listing → App icon</li>
+            <li>Upload <strong>Feature Graphic (1024x500)</strong> to Play Console → Store listing → Feature graphic</li>
+        </ol>
+    </div>
+
+    <h2>App Icon (512x512 PNG)</h2>
+    <div class="asset-container">
+        <canvas id="iconCanvas" width="512" height="512"></canvas>
+        <br>
+        <button onclick="downloadIcon()">⬇️ Download App Icon</button>
+        <p class="info">Required: 512 x 512 pixels, PNG format</p>
+    </div>
+
+    <h2>Feature Graphic (1024x500 PNG)</h2>
+    <div class="asset-container">
+        <canvas id="featureCanvas" width="1024" height="500"></canvas>
+        <br>
+        <button onclick="downloadFeature()">⬇️ Download Feature Graphic</button>
+        <p class="info">Required: 1024 x 500 pixels, PNG format</p>
+    </div>
+
+    <script>
+        // Draw App Icon (512x512)
+        function drawIcon() {
+            const canvas = document.getElementById('iconCanvas');
+            const ctx = canvas.getContext('2d');
+            const size = 512;
+            const scale = size / 108;
+
+            // Background - purple gradient
+            const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+            gradient.addColorStop(0, '#9C6AFF');
+            gradient.addColorStop(1, '#7C4DFF');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+
+            // Add subtle pattern
+            ctx.globalAlpha = 0.1;
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.arc(size/2, size/2, 80 + i * 40, 0, Math.PI * 2);
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+
+            // Center the icon elements
+            ctx.save();
+            ctx.translate(size/2 - 54*scale, size/2 - 54*scale);
+            ctx.scale(scale, scale);
+
+            // Inner circle (white)
+            ctx.beginPath();
+            ctx.arc(54, 40, 14, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            // Play triangle (dark purple)
+            ctx.beginPath();
+            ctx.moveTo(50, 33);
+            ctx.lineTo(62, 40);
+            ctx.lineTo(50, 47);
+            ctx.closePath();
+            ctx.fillStyle = '#5E35B1';
+            ctx.fill();
+
+            // Wave 1 (white)
+            ctx.beginPath();
+            ctx.arc(54, 72, 16, Math.PI, 0, false);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            // Wave 2 (light purple)
+            ctx.beginPath();
+            ctx.arc(54, 72, 11, Math.PI, 0, false);
+            ctx.fillStyle = '#B388FF';
+            ctx.fill();
+
+            // Wave 3 (white)
+            ctx.beginPath();
+            ctx.arc(54, 72, 6, Math.PI, 0, false);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Draw Feature Graphic (1024x500)
+        function drawFeature() {
+            const canvas = document.getElementById('featureCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = 1024;
+            const height = 500;
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, width, height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(0.5, '#16213e');
+            gradient.addColorStop(1, '#0f0f23');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Add decorative waves
+            ctx.globalAlpha = 0.15;
+            for (let i = 0; i < 6; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, height);
+                for (let x = 0; x <= width; x += 10) {
+                    const y = height - 50 - i * 30 + Math.sin(x * 0.01 + i) * 20;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(width, height);
+                ctx.closePath();
+                ctx.fillStyle = '#7C4DFF';
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Draw icon on left side
+            const iconSize = 200;
+            const iconX = 120;
+            const iconY = height/2 - iconSize/2;
+
+            // Icon background circle
+            ctx.beginPath();
+            ctx.arc(iconX + iconSize/2, iconY + iconSize/2, iconSize/2, 0, Math.PI * 2);
+            const iconGradient = ctx.createRadialGradient(
+                iconX + iconSize/2, iconY + iconSize/2, 0,
+                iconX + iconSize/2, iconY + iconSize/2, iconSize/2
+            );
+            iconGradient.addColorStop(0, '#9C6AFF');
+            iconGradient.addColorStop(1, '#7C4DFF');
+            ctx.fillStyle = iconGradient;
+            ctx.fill();
+
+            // Icon elements
+            const scale = iconSize / 108;
+            ctx.save();
+            ctx.translate(iconX, iconY);
+            ctx.scale(scale, scale);
+
+            // Inner circle
+            ctx.beginPath();
+            ctx.arc(54, 40, 14, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            // Play triangle
+            ctx.beginPath();
+            ctx.moveTo(50, 33);
+            ctx.lineTo(62, 40);
+            ctx.lineTo(50, 47);
+            ctx.closePath();
+            ctx.fillStyle = '#5E35B1';
+            ctx.fill();
+
+            // Waves
+            ctx.beginPath();
+            ctx.arc(54, 72, 16, Math.PI, 0, false);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(54, 72, 11, Math.PI, 0, false);
+            ctx.fillStyle = '#B388FF';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(54, 72, 6, Math.PI, 0, false);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            ctx.restore();
+
+            // App name
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 72px Segoe UI, Arial, sans-serif';
+            ctx.fillText('AAC Mix Radio', 360, 220);
+
+            // Tagline
+            ctx.fillStyle = '#B388FF';
+            ctx.font = '36px Segoe UI, Arial, sans-serif';
+            ctx.fillText('Stream 30,000+ Radio Stations Worldwide', 360, 280);
+
+            // Features
+            ctx.fillStyle = '#888888';
+            ctx.font = '24px Segoe UI, Arial, sans-serif';
+            ctx.fillText('🎵 Free  •  🌍 Global  •  🚗 Android Auto  •  ❤️ Favorites', 360, 340);
+
+            // Bottom tagline
+            ctx.fillStyle = '#7C4DFF';
+            ctx.font = 'bold 28px Segoe UI, Arial, sans-serif';
+            ctx.fillText('Your Music, Everywhere', 360, 420);
+        }
+
+        // Download functions
+        function downloadIcon() {
+            const canvas = document.getElementById('iconCanvas');
+            const link = document.createElement('a');
+            link.download = 'aac_radio_icon_512x512.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function downloadFeature() {
+            const canvas = document.getElementById('featureCanvas');
+            const link = document.createElement('a');
+            link.download = 'aac_radio_feature_graphic_1024x500.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Draw on load
+        window.onload = function() {
+            drawIcon();
+            drawFeature();
+        };
+    </script>
+</body>
+</html>
