@@ -38,11 +38,12 @@ import com.pypyradio.aacplayer.ui.vm.StationsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Main tabs
-private enum class MainTab { TOP, GENRES, INDIA, NEWS }
+// Main tabs - English and Indian radio only
+private enum class MainTab { ENGLISH, INDIA, HINDI, NEWS }
 
-// Genre categories for browsing
-private val GENRES = listOf(
+// English genres for browsing
+private val ENGLISH_GENRES = listOf(
+    "All" to null,
     "Pop" to "pop",
     "Rock" to "rock",
     "Jazz" to "jazz",
@@ -50,11 +51,7 @@ private val GENRES = listOf(
     "Talk" to "talk",
     "Country" to "country",
     "Electronic" to "electronic",
-    "Hip Hop" to "hip hop",
-    "R&B" to "rnb",
-    "Latin" to "latin",
-    "Reggae" to "reggae",
-    "World" to "world"
+    "Hip Hop" to "hip hop"
 )
 
 // Indian languages
@@ -71,17 +68,11 @@ private val INDIA_LANGUAGES = listOf(
     "Malayalam" to "malayalam"
 )
 
-// News languages
+// News languages - English and Hindi only
 private val NEWS_LANGUAGES = listOf(
     "All" to null,
     "English" to "english",
-    "Hindi" to "hindi",
-    "Spanish" to "spanish",
-    "French" to "french",
-    "German" to "german",
-    "Portuguese" to "portuguese",
-    "Arabic" to "arabic",
-    "Russian" to "russian"
+    "Hindi" to "hindi"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,8 +224,8 @@ fun BrowseScreen(
         }
     }
 
-    // Tab state
-    var selectedTab by remember { mutableStateOf(MainTab.TOP) }
+    // Tab state - default to English
+    var selectedTab by remember { mutableStateOf(MainTab.ENGLISH) }
     var selectedSubFilter by remember { mutableStateOf<String?>(null) }
     
     Scaffold(
@@ -287,28 +278,19 @@ fun BrowseScreen(
                 }
             }
             
-            // Main tabs
+            // Main tabs - English and Indian radio
             ScrollableTabRow(
                 selectedTabIndex = MainTab.entries.indexOf(selectedTab),
                 edgePadding = 12.dp
             ) {
                 Tab(
-                    selected = selectedTab == MainTab.TOP,
+                    selected = selectedTab == MainTab.ENGLISH,
                     onClick = { 
-                        selectedTab = MainTab.TOP
+                        selectedTab = MainTab.ENGLISH
                         selectedSubFilter = null
-                        vm.loadTop()
+                        vm.searchByLanguage("english")
                     },
-                    text = { Text("Top") }
-                )
-                Tab(
-                    selected = selectedTab == MainTab.GENRES,
-                    onClick = { 
-                        selectedTab = MainTab.GENRES
-                        selectedSubFilter = "pop"
-                        vm.searchByTag("pop")
-                    },
-                    text = { Text("Genres") }
+                    text = { Text("English") }
                 )
                 Tab(
                     selected = selectedTab == MainTab.INDIA,
@@ -320,11 +302,20 @@ fun BrowseScreen(
                     text = { Text("India") }
                 )
                 Tab(
+                    selected = selectedTab == MainTab.HINDI,
+                    onClick = { 
+                        selectedTab = MainTab.HINDI
+                        selectedSubFilter = null
+                        vm.searchByLanguage("hindi")
+                    },
+                    text = { Text("Hindi") }
+                )
+                Tab(
                     selected = selectedTab == MainTab.NEWS,
                     onClick = { 
                         selectedTab = MainTab.NEWS
                         selectedSubFilter = null
-                        vm.searchByTag("news")
+                        vm.searchNewsByLanguage("english")
                     },
                     text = { Text("News") }
                 )
@@ -332,7 +323,7 @@ fun BrowseScreen(
             
             // Sub-filter chips based on selected tab
             when (selectedTab) {
-                MainTab.GENRES -> {
+                MainTab.ENGLISH -> {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -340,12 +331,16 @@ fun BrowseScreen(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        GENRES.forEach { (label, tag) ->
+                        ENGLISH_GENRES.forEach { (label, tag) ->
                             FilterChip(
-                                selected = selectedSubFilter == tag,
+                                selected = selectedSubFilter == (tag ?: "all_english"),
                                 onClick = { 
-                                    selectedSubFilter = tag
-                                    vm.searchByTag(tag)
+                                    selectedSubFilter = tag ?: "all_english"
+                                    if (tag != null) {
+                                        vm.searchByLanguageAndTag("english", tag)
+                                    } else {
+                                        vm.searchByLanguage("english")
+                                    }
                                 },
                                 label = { Text(label) }
                             )
@@ -392,7 +387,7 @@ fun BrowseScreen(
                         }
                     }
                 }
-                else -> { /* No sub-filters for TOP */ }
+                MainTab.HINDI -> { /* No sub-filters for Hindi */ }
             }
             
             // Filter chips for working/failed stations
