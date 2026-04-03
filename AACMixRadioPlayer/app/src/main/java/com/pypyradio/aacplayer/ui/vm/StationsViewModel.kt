@@ -39,7 +39,7 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init { 
-        loadTop()
+        searchByLanguage("english") // Default to English stations
         loadStationStatuses()
     }
     
@@ -90,6 +90,20 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     fun searchNewsByLanguage(language: String?) = viewModelScope.launch {
         _browse.value = _browse.value.copy(loading = true, error = null)
         runCatching { repo.searchNewsByLanguage(language, 200) }
+            .onSuccess { _browse.value = _browse.value.copy(loading = false, stations = it, error = null) }
+            .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
+    }
+
+    fun searchByLanguage(language: String) = viewModelScope.launch {
+        _browse.value = _browse.value.copy(loading = true, error = null)
+        runCatching { repo.searchByLanguage(language, 500) }
+            .onSuccess { _browse.value = _browse.value.copy(loading = false, stations = it, error = null) }
+            .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
+    }
+
+    fun searchByLanguageAndTag(language: String, tag: String) = viewModelScope.launch {
+        _browse.value = _browse.value.copy(loading = true, error = null)
+        runCatching { repo.searchByLanguageAndTag(language, tag, 300) }
             .onSuccess { _browse.value = _browse.value.copy(loading = false, stations = it, error = null) }
             .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
     }

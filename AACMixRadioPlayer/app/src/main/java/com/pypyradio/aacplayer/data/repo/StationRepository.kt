@@ -114,6 +114,46 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
             .take(limit)
     }
 
+    suspend fun searchByLanguage(language: String, limit: Int = 500): List<Station> {
+        val api = RadioBrowserClient.api()
+        val result = api.searchStations(
+            name = null,
+            tag = null,
+            country = null,
+            language = language,
+            codec = null,
+            hideBroken = true,
+            limit = limit * 2,
+            order = "votes",
+            reverse = true
+        )
+        return result
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            .map { it.toDomain() }
+            .deduplicateByHighestBitrate()
+            .take(limit)
+    }
+
+    suspend fun searchByLanguageAndTag(language: String, tag: String, limit: Int = 300): List<Station> {
+        val api = RadioBrowserClient.api()
+        val result = api.searchStations(
+            name = null,
+            tag = tag,
+            country = null,
+            language = language,
+            codec = null,
+            hideBroken = true,
+            limit = limit * 2,
+            order = "votes",
+            reverse = true
+        )
+        return result
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            .map { it.toDomain() }
+            .deduplicateByHighestBitrate()
+            .take(limit)
+    }
+
     suspend fun toggleFavorite(station: Station) {
         val isFav = favoritesDao.isFavorite(station.stationuuid)
         if (isFav) {
