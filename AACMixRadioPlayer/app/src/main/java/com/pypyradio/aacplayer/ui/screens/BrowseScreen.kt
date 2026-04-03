@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +33,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.pypyradio.aacplayer.data.model.Station
+import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.playback.RadioController
 import com.pypyradio.aacplayer.ui.vm.StationFilter
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
@@ -245,12 +247,22 @@ fun BrowseScreen(
                     IconButton(onClick = { playRandom() }) {
                         Icon(Icons.Default.Shuffle, contentDescription = "Play Random")
                     }
-                    IconButton(onClick = onGoPodcasts) {
-                        Icon(Icons.Default.Podcasts, contentDescription = "Podcasts")
-                    }
                     IconButton(onClick = onGoFavorites) {
                         Icon(Icons.Default.Favorite, contentDescription = "Favorites", tint = Color.Red)
                     }
+                    
+                    // Podcast button - stands out with filled style
+                    FilledTonalIconButton(
+                        onClick = onGoPodcasts,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Podcasts, 
+                            contentDescription = "Podcasts",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
                     IconButton(onClick = onGoAbout) {
                         Icon(Icons.Default.Info, contentDescription = "About")
                     }
@@ -390,13 +402,18 @@ fun BrowseScreen(
                 MainTab.HINDI -> { /* No sub-filters for Hindi */ }
             }
             
-            // Filter chips for working/failed stations
+            // Filter chips and auto-skip toggle
+            val context = LocalContext.current
+            val prefs = remember { AppPreferences.get(context) }
+            val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
+            
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 FilterChip(
                     selected = state.filter == StationFilter.ALL,
@@ -412,6 +429,25 @@ fun BrowseScreen(
                     selected = state.filter == StationFilter.WORKING_ONLY,
                     onClick = { vm.setFilter(StationFilter.WORKING_ONLY) },
                     label = { Text("Working Only") }
+                )
+                
+                Spacer(Modifier.width(8.dp))
+                
+                // Auto-skip toggle
+                FilterChip(
+                    selected = autoSkipEnabled,
+                    onClick = { prefs.setAutoSkipEnabled(!autoSkipEnabled) },
+                    label = { 
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.SkipNext,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Auto-Skip")
+                        }
+                    }
                 )
             }
             

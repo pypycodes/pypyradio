@@ -13,6 +13,7 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import com.pypyradio.aacplayer.MainActivity
 import com.pypyradio.aacplayer.data.db.AppDatabase
 import com.pypyradio.aacplayer.data.model.Station
+import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.data.repo.StationRepository
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -27,6 +28,7 @@ class RadioPlaybackService : MediaLibraryService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private lateinit var repo: StationRepository
+    private lateinit var prefs: AppPreferences
 
     @Volatile private var topStations: List<Station> = emptyList()
     @Volatile private var favoriteStations: List<Station> = emptyList()
@@ -159,20 +161,24 @@ class RadioPlaybackService : MediaLibraryService() {
         )
 
         repo = StationRepository(AppDatabase.get(this).favoritesDao())
+        prefs = AppPreferences.get(this)
 
-        // Configure load control for faster playback start (like web browsers)
+        // Configure load control optimized for slow/unstable connections
+        // Larger buffers = more resilient to network hiccups
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                2500,   // Min buffer before playback starts (2.5 sec - fast start like browser)
-                30000,  // Max buffer size (30 sec)
-                1500,   // Buffer for playback (1.5 sec)
-                3000    // Buffer for rebuffering (3 sec)
+                5000,    // Min buffer before playback starts (5 sec - slightly longer for stability)
+                60000,   // Max buffer size (60 sec - large buffer for slow connections)
+                2500,    // Buffer for playback (2.5 sec)
+                5000     // Buffer for rebuffering (5 sec - more buffer after rebuffer)
             )
+            .setPrioritizeTimeOverSizeThresholds(true) // Prioritize playback continuity
             .build()
         
         player = ExoPlayer.Builder(this)
             .setHandleAudioBecomingNoisy(true)
             .setLoadControl(loadControl)
+            .setWakeMode(android.media.AudioManager.MODE_NORMAL)
             .build().apply {
                 playWhenReady = true
                 // Enable shuffle and repeat modes for Android Auto controls
@@ -181,26 +187,57 @@ class RadioPlaybackService : MediaLibraryService() {
 
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        if (retryCount < maxRetries && currentMediaItem != null) {
+                        // More aggressive retry for network errors
+                        val isNetworkError = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                            error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                            error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+                        
+                        val maxRetryForError = if (isNetworkError) 5 else maxRetries
+                        
+                        if (retryCount < maxRetryForError && currentMediaItem != null) {
                             val waitMs = when (retryCount) {
-                                0 -> 2000L
-                                1 -> 4000L
-                                else -> 6000L
+                                0 -> 1000L   // Quick first retry
+                                1 -> 2000L
+                                2 -> 3000L
+                                3 -> 5000L
+                                else -> 8000L
                             }
                             retryCount++
                             scope.launch {
                                 delay(waitMs)
+                                // Reset and prepare fresh for better recovery
+                                stop()
+                                prepare()
+                                play()
+                            }
+                        } else if (prefs.isAutoSkipEnabled() && mediaItemCount > 1) {
+                            // Auto-skip to next station if enabled and retries exhausted
+                            scope.launch {
+                                delay(500L)
+                                retryCount = 0
+                                if (hasNextMediaItem()) {
+                                    seekToNextMediaItem()
+                                } else {
+                                    // Loop back to first station
+                                    seekTo(0, 0L)
+                                }
                                 prepare()
                                 play()
                             }
                         }
-                        // Don't auto-skip - user will manually skip if needed
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                         retryCount = 0
                         mediaItem?.mediaId?.takeIf { it.isNotBlank() }?.let { id ->
                             scope.launch(Dispatchers.IO) { repo.pingClick(id) }
+                        }
+                    }
+                    
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        // Reset retry count when playback is ready/playing
+                        if (playbackState == Player.STATE_READY) {
+                            retryCount = 0
                         }
                     }
                 })
