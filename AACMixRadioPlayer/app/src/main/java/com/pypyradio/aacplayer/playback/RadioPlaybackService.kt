@@ -216,14 +216,10 @@ class RadioPlaybackService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .build()
 
-        // Prefetch top stations and load them as playlist for next/prev controls
+        // Prefetch top stations for browsing (but don't auto-load into player - Android Auto requirement MA-1)
         scope.launch {
             topStations = runCatching { repo.topVotedAac(120) }.getOrDefault(emptyList())
-            // Pre-load stations as playlist for Android Auto next/prev controls
-            if (topStations.isNotEmpty()) {
-                val mediaItems = topStations.map { playableFromStation(it) }
-                player?.setMediaItems(mediaItems)
-            }
+            // Don't pre-load into player - wait for user action (Android Auto compliance)
         }
 
         // Keep favorites updated
@@ -258,31 +254,49 @@ class RadioPlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
-    private fun browsable(id: String, title: String): MediaItem =
-        MediaItem.Builder()
+    private fun browsable(id: String, title: String): MediaItem {
+        // Use folder type for browsable items
+        val folderType = when (id) {
+            MEDIA_ID_TOP -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
+            MEDIA_ID_FAV -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
+            else -> MediaMetadata.FOLDER_TYPE_MIXED
+        }
+        
+        return MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(title)
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
+                    .setFolderType(folderType)
                     .build()
             )
             .build()
+    }
 
-    private fun playableFromStation(st: Station): MediaItem =
-        MediaItem.Builder()
+    private fun playableFromStation(st: Station): MediaItem {
+        // Build artwork URI from favicon if available
+        val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let { 
+            android.net.Uri.parse(it) 
+        }
+        
+        return MediaItem.Builder()
             .setMediaId(st.stationuuid)
             .setUri(st.urlResolved)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(st.name)
-                    .setArtist(st.countryCode ?: "")
+                    .setArtist(st.countryCode ?: "Radio")
+                    .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                    .setArtworkUri(artworkUri)
                     .setIsPlayable(true)
                     .setIsBrowsable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                     .build()
             )
             .build()
+    }
 
     companion object {
         const val MEDIA_ID_ROOT = "root"
