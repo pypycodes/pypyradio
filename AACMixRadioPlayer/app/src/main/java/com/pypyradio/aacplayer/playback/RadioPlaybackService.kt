@@ -1,7 +1,10 @@
 package com.pypyradio.aacplayer.playback
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
+import android.os.PowerManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -48,6 +51,10 @@ class RadioPlaybackService : MediaLibraryService() {
     @Volatile private var currentPlaylistContext: String = MEDIA_ID_TOP
 
     private var retryCount = 0
+    
+    // Locks to keep network alive when screen is off
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     private val maxRetries = 3
 
     private val callback = object : MediaLibrarySession.Callback {
@@ -232,16 +239,30 @@ class RadioPlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Acquire WiFi lock to keep WiFi active when screen is off
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyradio:wifilock")
+        wifiLock?.setReferenceCounted(false)
+        wifiLock?.acquire()
+        
+        // Acquire partial wake lock to keep CPU running for network operations
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pypyradio:wakelock")
+        wakeLock?.setReferenceCounted(false)
+        wakeLock?.acquire()
 
         // Create notification channel for Android 8+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel(
                 "playback",
-                "Playback",
-                android.app.NotificationManager.IMPORTANCE_LOW
+                "Media Playback",
+                android.app.NotificationManager.IMPORTANCE_DEFAULT  // Required for lock screen visibility
             ).apply {
                 description = "Media playback controls"
                 setShowBadge(false)
+                setSound(null, null)  // No sound for media notifications
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC  // Show on lock screen
             }
             val notificationManager = getSystemService(android.app.NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
@@ -402,6 +423,17 @@ class RadioPlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        // Release locks
+        wifiLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wifiLock = null
+        
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
+        
         session?.run {
             player.release()
             release()
