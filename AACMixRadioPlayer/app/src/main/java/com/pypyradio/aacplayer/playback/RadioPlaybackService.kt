@@ -11,6 +11,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
@@ -93,6 +94,8 @@ class RadioPlaybackService : MediaLibraryService() {
                         .setTitle("pypyradio")
                         .setIsBrowsable(true)
                         .setIsPlayable(false)
+                        .setFolderType(MediaMetadata.FOLDER_TYPE_MIXED)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                         .build()
                 )
                 .build()
@@ -107,38 +110,40 @@ class RadioPlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-
-            val items = when (parentId) {
-                MEDIA_ID_ROOT -> listOf(
-                    browsable(MEDIA_ID_TOP, "Top Stations"),
-                    browsable(MEDIA_ID_HINDI, "Top Hindi"),
-                    browsable(MEDIA_ID_ENGLISH, "Top English"),
-                    browsable(MEDIA_ID_FAV, "Favorites"),
-                    browsable(MEDIA_ID_PODCASTS, "Podcasts")
-                )
-                MEDIA_ID_TOP -> topStations.map { playableFromStation(it) }
-                MEDIA_ID_HINDI -> topHindiStations.map { playableFromStation(it) }
-                MEDIA_ID_ENGLISH -> topEnglishStations.map { playableFromStation(it) }
-                MEDIA_ID_FAV -> favoriteStations.map { playableFromStation(it) }
-                MEDIA_ID_PODCASTS -> trendingPodcasts.map { browsableFromPodcast(it) }
-                else -> {
-                    // Check if it's a podcast ID - load episodes
-                    if (parentId.startsWith("podcast_")) {
-                        val podcastId = parentId.removePrefix("podcast_")
-                        podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it) } ?: run {
-                            // Load episodes async and return empty for now
-                            scope.launch(Dispatchers.IO) {
-                                loadPodcastEpisodes(podcastId)
+            return try {
+                val items = when (parentId) {
+                    MEDIA_ID_ROOT -> listOf(
+                        browsable(MEDIA_ID_TOP, "Top Stations"),
+                        browsable(MEDIA_ID_HINDI, "Top Hindi"),
+                        browsable(MEDIA_ID_ENGLISH, "Top English"),
+                        browsable(MEDIA_ID_FAV, "Favorites"),
+                        browsable(MEDIA_ID_PODCASTS, "Podcasts")
+                    )
+                    MEDIA_ID_TOP -> topStations.map { playableFromStation(it) }
+                    MEDIA_ID_HINDI -> topHindiStations.map { playableFromStation(it) }
+                    MEDIA_ID_ENGLISH -> topEnglishStations.map { playableFromStation(it) }
+                    MEDIA_ID_FAV -> favoriteStations.map { playableFromStation(it) }
+                    MEDIA_ID_PODCASTS -> trendingPodcasts.map { browsableFromPodcast(it) }
+                    else -> {
+                        // Check if it's a podcast ID - load episodes
+                        if (parentId.startsWith("podcast_")) {
+                            val podcastId = parentId.removePrefix("podcast_")
+                            podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it) } ?: run {
+                                // Load episodes async and return empty for now
+                                scope.launch(Dispatchers.IO) {
+                                    loadPodcastEpisodes(podcastId)
+                                }
+                                emptyList()
                             }
+                        } else {
                             emptyList()
                         }
-                    } else {
-                        emptyList()
                     }
                 }
+                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+            } catch (e: Exception) {
+                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
             }
-
-            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
         }
 
         override fun onAddMediaItems(
