@@ -41,3 +41,4 @@ proguard/
 # Misc
 .cxx/
 .externalNativeBuild/
+.code-workspace
