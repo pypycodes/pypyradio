@@ -81,7 +81,7 @@ private val NEWS_LANGUAGES = listOf(
 @Composable
 fun BrowseScreen(
     vm: StationsViewModel,
-    player: androidx.media3.exoplayer.ExoPlayer,
+    player: Player,
     onGoFavorites: () -> Unit, 
     onGoAbout: () -> Unit, 
     onGoPodcasts: () -> Unit,
@@ -162,12 +162,20 @@ fun BrowseScreen(
                 val playlistIndex = nearbyStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
                 
                 val mediaItems = nearbyStations.map { station ->
+                    val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
+                        android.net.Uri.parse(it)
+                    }
                     androidx.media3.common.MediaItem.Builder()
                         .setMediaId(station.stationuuid)
                         .setUri(station.urlResolved)
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
                                 .setTitle(station.name)
+                                .setArtist(station.countryCode ?: "Radio")
+                                .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                                .setArtworkUri(artworkUri)
+                                .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
+                                .setIsPlayable(true)
                                 .build()
                         )
                         .build()
@@ -187,12 +195,20 @@ fun BrowseScreen(
                 try {
                     player.stop()
                     player.clearMediaItems()
+                    val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let {
+                        android.net.Uri.parse(it)
+                    }
                     val mediaItem = androidx.media3.common.MediaItem.Builder()
                         .setMediaId(st.stationuuid)
                         .setUri(url)
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
                                 .setTitle(st.name)
+                                .setArtist(st.countryCode ?: "Radio")
+                                .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                                .setArtworkUri(artworkUri)
+                                .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
+                                .setIsPlayable(true)
                                 .build()
                         )
                         .build()

@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun PodcastScreen(
     vm: PodcastViewModel = viewModel(),
-    player: androidx.media3.exoplayer.ExoPlayer,
+    player: Player,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
