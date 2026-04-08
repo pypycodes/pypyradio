@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- WAKE_LOCK: Required to keep network alive during Android Auto playback -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: Prevents Doze mode from killing network during background playback -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".AACRadioApp"
