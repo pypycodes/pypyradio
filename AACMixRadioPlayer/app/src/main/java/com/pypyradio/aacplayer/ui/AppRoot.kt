@@ -46,7 +46,15 @@ fun AppRoot() {
             )
             .build()
         
+        // Audio attributes for music - CRITICAL for audio focus (pauses Spotify, etc.)
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+        
         androidx.media3.exoplayer.ExoPlayer.Builder(context)
+            .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
+            .setHandleAudioBecomingNoisy(true) // Pause when headphones unplugged
             .setLoadControl(loadControl)
             .build().apply {
                 playWhenReady = true
