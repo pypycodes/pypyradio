@@ -17,11 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 
 @Composable
 fun SimpleNowPlayingBar(
-    player: ExoPlayer,
+    player: Player,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     onStationFailed: (String) -> Unit = {}
