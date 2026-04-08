@@ -430,7 +430,7 @@ class RadioPlaybackService : MediaLibraryService() {
             MEDIA_ID_HINDI -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
             MEDIA_ID_ENGLISH -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
             MEDIA_ID_FAV -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
-            MEDIA_ID_PODCASTS -> MediaMetadata.FOLDER_TYPE_PODCASTS
+            MEDIA_ID_PODCASTS -> MediaMetadata.FOLDER_TYPE_TITLES
             else -> MediaMetadata.FOLDER_TYPE_MIXED
         }
         
