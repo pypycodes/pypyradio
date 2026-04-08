@@ -17,8 +17,8 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile private var INSTANCE: AppDatabase? = null
         
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("""
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS favorite_podcasts (
                         id TEXT PRIMARY KEY NOT NULL,
                         title TEXT NOT NULL,
@@ -35,8 +35,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
         
         private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("""
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS station_status (
                         stationuuid TEXT PRIMARY KEY NOT NULL,
                         lastPlayedTimestamp INTEGER NOT NULL DEFAULT 0,
