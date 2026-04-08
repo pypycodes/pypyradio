@@ -97,15 +97,9 @@ android {
     }
 }
 
-// Separate task to rename AAB after build
-tasks.register("renameReleaseAab") {
-    description = "Renames the release AAB to include version name"
-    group = "build"
-    
-    // Run after bundleRelease finishes
-    dependsOn("bundleRelease")
-    
-    doLast {
+// Rename AAB after bundleRelease completes
+afterEvaluate {
+    tasks.findByName("bundleRelease")?.doLast {
         val bundleDir = layout.buildDirectory.dir("outputs/bundle/release").get().asFile
         val versionName = android.defaultConfig.versionName
         bundleDir.listFiles()?.filter { it.extension == "aab" }?.forEach { aab ->
@@ -116,11 +110,6 @@ tasks.register("renameReleaseAab") {
             }
         }
     }
-}
-
-// Make bundleRelease automatically trigger rename
-tasks.named("bundleRelease") {
-    finalizedBy("renameReleaseAab")
 }
 
 dependencies {
