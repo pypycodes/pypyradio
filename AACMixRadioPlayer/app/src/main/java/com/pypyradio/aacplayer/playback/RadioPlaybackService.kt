@@ -242,7 +242,13 @@ class RadioPlaybackService : MediaLibraryService() {
         
         // Acquire WiFi lock to keep WiFi active when screen is off
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyradio:wifilock")
+        @Suppress("DEPRECATION")
+        val wifiMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        } else {
+            WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        }
+        wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
         wifiLock?.setReferenceCounted(false)
         wifiLock?.acquire()
         
