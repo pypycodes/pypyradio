@@ -2,7 +2,6 @@ package com.pypyradio.aacplayer.playback
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.media.AudioManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -13,8 +12,6 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession
-import androidx.media3.session.SessionCommand
-import androidx.media3.session.SessionResult
 import androidx.media3.session.DefaultMediaNotificationProvider
 import com.pypyradio.aacplayer.MainActivity
 import com.pypyradio.aacplayer.data.db.AppDatabase
