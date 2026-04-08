@@ -67,8 +67,6 @@ class RadioPlaybackService : MediaLibraryService() {
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 .add(Player.COMMAND_SET_SHUFFLE_MODE)
                 .add(Player.COMMAND_SET_REPEAT_MODE)
-                .add(Player.COMMAND_ADJUST_DEVICE_VOLUME)
-                .add(Player.COMMAND_SET_DEVICE_VOLUME)
                 .add(Player.COMMAND_GET_DEVICE_VOLUME)
                 .add(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS)
                 .build()
@@ -91,7 +89,6 @@ class RadioPlaybackService : MediaLibraryService() {
                         .setTitle("pypyradio")
                         .setIsBrowsable(true)
                         .setIsPlayable(false)
-                        .setFolderType(MediaMetadata.FOLDER_TYPE_MIXED)
                         .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                         .build()
                 )
@@ -406,7 +403,7 @@ class RadioPlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         session?.run {
-            player?.release()
+            player.release()
             release()
         }
         player = null
@@ -426,14 +423,14 @@ class RadioPlaybackService : MediaLibraryService() {
     }
     
     private fun browsable(id: String, title: String): MediaItem {
-        // Use folder type for browsable items
-        val folderType = when (id) {
-            MEDIA_ID_TOP -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
-            MEDIA_ID_HINDI -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
-            MEDIA_ID_ENGLISH -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
-            MEDIA_ID_FAV -> MediaMetadata.FOLDER_TYPE_PLAYLISTS
-            MEDIA_ID_PODCASTS -> MediaMetadata.FOLDER_TYPE_TITLES
-            else -> MediaMetadata.FOLDER_TYPE_MIXED
+        // Use media type for browsable items (folderType is deprecated)
+        val mediaType = when (id) {
+            MEDIA_ID_TOP -> MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            MEDIA_ID_HINDI -> MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            MEDIA_ID_ENGLISH -> MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            MEDIA_ID_FAV -> MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+            MEDIA_ID_PODCASTS -> MediaMetadata.MEDIA_TYPE_FOLDER_PODCASTS
+            else -> MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
         }
         
         return MediaItem.Builder()
@@ -443,7 +440,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     .setTitle(title)
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
-                    .setFolderType(folderType)
+                    .setMediaType(mediaType)
                     .build()
             )
             .build()
@@ -486,8 +483,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     .setArtworkUri(artworkUri)
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
-                    .setFolderType(MediaMetadata.FOLDER_TYPE_ALBUMS)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS)
                     .build()
             )
             .build()
