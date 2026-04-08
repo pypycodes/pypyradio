@@ -97,22 +97,30 @@ android {
     }
 }
 
-// Rename AAB after build
-tasks.whenTaskAdded {
-    if (name == "bundleRelease") {
-        doLast {
-            val bundleDir = file("${project.layout.buildDirectory.get()}/outputs/bundle/release")
-            val versionName = android.defaultConfig.versionName
-            bundleDir.listFiles()?.filter { it.extension == "aab" }?.forEach { aab ->
-                val newName = "pypyradio-${versionName}.aab"
-                val newFile = File(bundleDir, newName)
-                if (aab.name != newName) {
-                    aab.renameTo(newFile)
-                    println("Renamed AAB to: $newName")
-                }
+// Separate task to rename AAB after build
+tasks.register("renameReleaseAab") {
+    description = "Renames the release AAB to include version name"
+    group = "build"
+    
+    // Run after bundleRelease finishes
+    dependsOn("bundleRelease")
+    
+    doLast {
+        val bundleDir = layout.buildDirectory.dir("outputs/bundle/release").get().asFile
+        val versionName = android.defaultConfig.versionName
+        bundleDir.listFiles()?.filter { it.extension == "aab" }?.forEach { aab ->
+            val newName = "pypyradio-${versionName}.aab"
+            val newFile = File(bundleDir, newName)
+            if (aab.name != newName && aab.renameTo(newFile)) {
+                println("Renamed AAB to: $newName")
             }
         }
     }
+}
+
+// Make bundleRelease automatically trigger rename
+tasks.named("bundleRelease") {
+    finalizedBy("renameReleaseAab")
 }
 
 dependencies {
