@@ -43,4 +43,10 @@ interface StationStatusDao {
     
     @Query("SELECT EXISTS(SELECT 1 FROM station_status WHERE stationuuid = :id)")
     suspend fun exists(id: String): Boolean
+    
+    @Query("DELETE FROM station_status WHERE stationuuid = :id")
+    suspend fun clearStatus(id: String)
+    
+    @Query("DELETE FROM station_status WHERE lastStatus = 'failed'")
+    suspend fun clearAllFailed()
 }
