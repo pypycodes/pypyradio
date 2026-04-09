@@ -16,6 +16,7 @@ interface RadioBrowserApi {
         @Query("name") name: String? = null,
         @Query("tag") tag: String? = null,
         @Query("country") country: String? = null,
+        @Query("countrycode") countryCode: String? = null,
         @Query("language") language: String? = null,
         @Query("codec") codec: String? = null,
         @Query("hidebroken") hideBroken: Boolean = true,

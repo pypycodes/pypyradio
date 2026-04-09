@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,41 +32,29 @@ import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
 import kotlinx.coroutines.launch
 
-// Main tabs - English and Indian radio only
-private enum class MainTab { ENGLISH, INDIA, HINDI, NEWS }
+// Country groups
+private enum class CountryGroup { INDIA, ENGLISH, WORLD }
 
-// English genres for browsing
-private val ENGLISH_GENRES = listOf(
-    "All" to null,
-    "Pop" to "pop",
-    "Rock" to "rock",
-    "Jazz" to "jazz",
-    "Classical" to "classical",
-    "Talk" to "talk",
-    "Country" to "country",
-    "Electronic" to "electronic",
-    "Hip Hop" to "hip hop"
-)
-
-// Indian languages
-private val INDIA_LANGUAGES = listOf(
-    "All" to null,
-    "Hindi" to "hindi",
-    "Marathi" to "marathi",
-    "Kannada" to "kannada",
-    "Tamil" to "tamil",
-    "Telugu" to "telugu",
-    "Bengali" to "bengali",
-    "Gujarati" to "gujarati",
-    "Punjabi" to "punjabi",
-    "Malayalam" to "malayalam"
-)
-
-// News languages - English and Hindi only
-private val NEWS_LANGUAGES = listOf(
-    "All" to null,
-    "English" to "english",
-    "Hindi" to "hindi"
+private val COUNTRY_GROUPS = mapOf(
+    CountryGroup.INDIA to listOf("India" to "IN"),
+    CountryGroup.ENGLISH to listOf(
+        "USA" to "US",
+        "UK" to "GB",
+        "Canada" to "CA",
+        "Australia" to "AU",
+        "New Zealand" to "NZ",
+        "Ireland" to "IE"
+    ),
+    CountryGroup.WORLD to listOf(
+        "Germany" to "DE",
+        "France" to "FR",
+        "Spain" to "ES",
+        "Italy" to "IT",
+        "Netherlands" to "NL",
+        "Brazil" to "BR",
+        "Japan" to "JP",
+        "Russia" to "RU"
+    )
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -260,64 +248,54 @@ fun BrowseScreen(
         }
     }
 
-    // Tab state - default to English
-    var selectedTab by remember { mutableStateOf(MainTab.ENGLISH) }
-    var selectedSubFilter by remember { mutableStateOf<String?>(null) }
+    // Selected group and country
+    var selectedGroup by remember { mutableStateOf(CountryGroup.INDIA) }
+    var selectedCountry by remember { mutableStateOf("IN") }
+    
+    // Load India stations on first launch
+    LaunchedEffect(Unit) {
+        vm.searchByCountry("IN")
+    }
     
     Scaffold(
         topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp
-            ) {
-                Column {
-                    TopAppBar(
-                        title = { 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { onGoAbout() }
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer
-                                ) {
-                                    Icon(
-                                        Icons.Default.Radio,
-                                        contentDescription = "About pypyradio",
-                                        modifier = Modifier.size(36.dp).padding(6.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    "pypyradio",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        },
-                        actions = {
-                            // About/Info button
-                            IconButton(onClick = onGoAbout) {
-                                Icon(
-                                    Icons.Default.Info,
-                                    contentDescription = "About",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent
+            TopAppBar(
+                title = { 
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onGoAbout() }
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                Icons.Default.Radio,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp).padding(6.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "pypyradio",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
-                    )
-                }
-            }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onGoAbout) {
+                        Icon(Icons.Default.Info, contentDescription = "About")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
         },
     ) { padding ->
         Column(modifier.padding(padding).fillMaxSize()) {
-
-            // Search bar - modern design
+            
+            // Search bar
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -349,211 +327,98 @@ fun BrowseScreen(
                         )
                     )
                     if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { vm.setQuery("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
+                        }
                         FilledTonalIconButton(
                             onClick = { vm.search() },
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Search",
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(18.dp))
                         }
                     }
                     Spacer(Modifier.width(4.dp))
                 }
             }
             
-            // Main tabs - English and Indian radio
-            ScrollableTabRow(
-                selectedTabIndex = MainTab.entries.indexOf(selectedTab),
-                edgePadding = 12.dp
+            // Group tabs: India | English | World
+            TabRow(
+                selectedTabIndex = CountryGroup.entries.indexOf(selectedGroup),
+                containerColor = MaterialTheme.colorScheme.surface
             ) {
                 Tab(
-                    selected = selectedTab == MainTab.ENGLISH,
+                    selected = selectedGroup == CountryGroup.INDIA,
                     onClick = { 
-                        selectedTab = MainTab.ENGLISH
-                        selectedSubFilter = null
-                        vm.searchByLanguage("english")
-                    },
-                    text = { Text("English") }
-                )
-                Tab(
-                    selected = selectedTab == MainTab.INDIA,
-                    onClick = { 
-                        selectedTab = MainTab.INDIA
-                        selectedSubFilter = null
-                        vm.searchByCountryAndLanguage("India", null)
+                        selectedGroup = CountryGroup.INDIA
+                        selectedCountry = "IN"
+                        vm.searchByCountry("IN")
                     },
                     text = { Text("India") }
                 )
                 Tab(
-                    selected = selectedTab == MainTab.HINDI,
+                    selected = selectedGroup == CountryGroup.ENGLISH,
                     onClick = { 
-                        selectedTab = MainTab.HINDI
-                        selectedSubFilter = null
-                        vm.searchByLanguage("hindi")
+                        selectedGroup = CountryGroup.ENGLISH
+                        val firstCountry = COUNTRY_GROUPS[CountryGroup.ENGLISH]?.firstOrNull()
+                        if (firstCountry != null) {
+                            selectedCountry = firstCountry.second
+                            vm.searchByCountry(firstCountry.second)
+                        }
                     },
-                    text = { Text("Hindi") }
+                    text = { Text("English") }
                 )
                 Tab(
-                    selected = selectedTab == MainTab.NEWS,
+                    selected = selectedGroup == CountryGroup.WORLD,
                     onClick = { 
-                        selectedTab = MainTab.NEWS
-                        selectedSubFilter = null
-                        vm.searchNewsByLanguage("english")
+                        selectedGroup = CountryGroup.WORLD
+                        val firstCountry = COUNTRY_GROUPS[CountryGroup.WORLD]?.firstOrNull()
+                        if (firstCountry != null) {
+                            selectedCountry = firstCountry.second
+                            vm.searchByCountry(firstCountry.second)
+                        }
                     },
-                    text = { Text("News") }
+                    text = { Text("World") }
                 )
             }
             
-            // Sub-filter chips based on selected tab
-            when (selectedTab) {
-                MainTab.ENGLISH -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ENGLISH_GENRES.forEach { (label, tag) ->
-                            FilterChip(
-                                selected = selectedSubFilter == (tag ?: "all_english"),
-                                onClick = { 
-                                    selectedSubFilter = tag ?: "all_english"
-                                    if (tag != null) {
-                                        vm.searchByLanguageAndTag("english", tag)
-                                    } else {
-                                        vm.searchByLanguage("english")
-                                    }
-                                },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-                MainTab.INDIA -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        INDIA_LANGUAGES.forEach { (label, lang) ->
-                            FilterChip(
-                                selected = selectedSubFilter == (lang ?: "all_india"),
-                                onClick = { 
-                                    selectedSubFilter = lang ?: "all_india"
-                                    vm.searchByCountryAndLanguage("India", lang)
-                                },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-                MainTab.NEWS -> {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        NEWS_LANGUAGES.forEach { (label, lang) ->
-                            FilterChip(
-                                selected = selectedSubFilter == (lang ?: "all_news"),
-                                onClick = { 
-                                    selectedSubFilter = lang ?: "all_news"
-                                    vm.searchNewsByLanguage(lang)
-                                },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-                MainTab.HINDI -> { /* No sub-filters for Hindi */ }
-            }
-            
-            // Filtered stations - auto-hide failed stations
-            val filteredStations = remember(state.stations, state.failedStationIds) {
-                state.stations.filter { !state.failedStationIds.contains(it.stationuuid) }
-            }
-            
-            // Pagination
-            val pageSize = 100
-            val totalPages = (filteredStations.size + pageSize - 1) / pageSize
-            var currentPage by remember { mutableStateOf(0) }
-            
-            // Reset page when stations change
-            LaunchedEffect(filteredStations.size) {
-                currentPage = 0
-            }
-            
-            val paginatedStations = remember(filteredStations, currentPage) {
-                val start = currentPage * pageSize
-                val end = minOf(start + pageSize, filteredStations.size)
-                if (start < filteredStations.size) filteredStations.subList(start, end) else emptyList()
-            }
-            
-            // Station count and pagination info
-            if (!state.loading && state.error == null) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+            // Country chips for selected group (only show if more than 1 country)
+            val countriesInGroup = COUNTRY_GROUPS[selectedGroup] ?: emptyList()
+            if (countriesInGroup.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Station count with failed info
-                        val failedCount = state.failedStationIds.size
-                        val countText = if (failedCount > 0) {
-                            "${filteredStations.size} stations (${failedCount} unavailable hidden)"
-                        } else {
-                            "${filteredStations.size} stations"
-                        }
-                        Text(
-                            countText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    countriesInGroup.forEach { (name, code) ->
+                        FilterChip(
+                            selected = selectedCountry == code,
+                            onClick = { 
+                                selectedCountry = code
+                                vm.searchByCountry(code)
+                            },
+                            label = { Text(name) }
                         )
-                        if (totalPages > 1) {
-                            Text(
-                                "Page ${currentPage + 1} of $totalPages",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    // Simple hint
-                    Text(
-                        "Auto-skips unavailable stations",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                
-                // Pagination tabs (show when more than 1 page)
-                if (totalPages > 1) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        for (page in 0 until totalPages) {
-                            FilterChip(
-                                selected = currentPage == page,
-                                onClick = { currentPage = page },
-                                label = { Text("${page + 1}") },
-                                modifier = Modifier.height(32.dp)
-                            )
-                        }
                     }
                 }
+            }
+            
+            // Filter out failed stations from display AND playlist
+            val displayStations = remember(state.stations, state.failedStationIds) {
+                state.stations.filter { 
+                    !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
+                }
+            }
+            
+            // Station count
+            if (!state.loading && state.error == null && displayStations.isNotEmpty()) {
+                Text(
+                    "${displayStations.size} stations",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
             }
 
             when {
@@ -562,22 +427,17 @@ fun BrowseScreen(
                 }
                 state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "Failed to load",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Failed to load", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = { vm.refresh() }) {
-                            Text("Retry")
-                        }
+                        TextButton(onClick = { vm.searchByCountry(selectedCountry) }) { Text("Retry") }
                     }
+                }
+                displayStations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No stations found", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(paginatedStations, key = { it.stationuuid }) { st ->
-                            val hasFailed = state.failedStationIds.contains(st.stationuuid)
-                            val isWorking = state.workingStationIds.contains(st.stationuuid)
+                        items(displayStations, key = { it.stationuuid }) { st ->
                             val isFavorite = favoriteIds.contains(st.stationuuid)
                             val isCurrentStation = currentPlayingId == st.stationuuid
                             val isCurrentlyPlaying = isCurrentStation && isPlaying
@@ -585,14 +445,10 @@ fun BrowseScreen(
                             
                             StationRow(
                                 st = st,
-                                hasFailed = hasFailed,
-                                isWorking = isWorking,
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
-                                onRowClick = { 
-                                    playStation(st, filteredStations)
-                                },
+                                onRowClick = { playStation(st, displayStations) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
                         }
@@ -606,8 +462,6 @@ fun BrowseScreen(
 @Composable
 private fun StationRow(
     st: Station, 
-    hasFailed: Boolean,
-    isWorking: Boolean = false,
     isFavorite: Boolean,
     isPlaying: Boolean,
     isBuffering: Boolean = false,
@@ -621,28 +475,23 @@ private fun StationRow(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = when {
-                isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                hasFailed -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-                else -> MaterialTheme.colorScheme.surface
-            }
+            containerColor = if (isActive) 
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+            else 
+                MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isActive) 4.dp else 1.dp
-        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp),
         onClick = onRowClick
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Station artwork with status indicator
-            Box(modifier = Modifier.size(52.dp)) {
+            Box(modifier = Modifier.size(48.dp)) {
                 Surface(
-                    modifier = Modifier.size(52.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     AsyncImage(
@@ -652,54 +501,23 @@ private fun StationRow(
                     )
                 }
                 // Status badge
-                when {
-                    isBuffering -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .align(Alignment.BottomEnd),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    isPlaying -> {
-                        Surface(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .align(Alignment.BottomEnd),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.padding(2.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-                    hasFailed -> {
-                        Surface(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .align(Alignment.BottomEnd),
-                            shape = CircleShape,
-                            color = Color(0xFFFFB300)
-                        ) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = "Failed",
-                                modifier = Modifier.padding(2.dp),
-                                tint = Color.White
-                            )
-                        }
-                    }
-                    isWorking -> {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .align(Alignment.BottomEnd)
-                                .background(Color(0xFF4CAF50), shape = CircleShape)
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else if (isPlaying) {
+                    Surface(
+                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.padding(2.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }
