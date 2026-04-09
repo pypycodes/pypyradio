@@ -17,8 +17,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -555,52 +555,45 @@ fun BrowseScreen(
                 }
             }
 
-            @OptIn(ExperimentalMaterial3Api::class)
-            PullToRefreshBox(
-                isRefreshing = state.loading,
-                onRefresh = { vm.refresh() },
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when {
-                    state.loading && state.stations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                    state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Failed to load",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            TextButton(onClick = { vm.refresh() }) {
-                                Text("Retry")
-                            }
+            when {
+                state.loading && state.stations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Failed to load",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        TextButton(onClick = { vm.refresh() }) {
+                            Text("Retry")
                         }
                     }
-                    else -> {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            items(paginatedStations, key = { it.stationuuid }) { st ->
-                                val hasFailed = state.failedStationIds.contains(st.stationuuid)
-                                val isWorking = state.workingStationIds.contains(st.stationuuid)
-                                val isFavorite = favoriteIds.contains(st.stationuuid)
-                                val isCurrentStation = currentPlayingId == st.stationuuid
-                                val isCurrentlyPlaying = isCurrentStation && isPlaying
-                                val isCurrentlyBuffering = isCurrentStation && isBuffering
-                                
-                                StationRow(
-                                    st = st,
-                                    hasFailed = hasFailed,
-                                    isWorking = isWorking,
-                                    isFavorite = isFavorite,
-                                    isPlaying = isCurrentlyPlaying,
-                                    isBuffering = isCurrentlyBuffering,
-                                    onRowClick = { 
-                                        playStation(st, filteredStations)
-                                    },
-                                    onFavorite = { vm.toggleFavorite(st) }
-                                )
-                            }
+                }
+                else -> {
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        items(paginatedStations, key = { it.stationuuid }) { st ->
+                            val hasFailed = state.failedStationIds.contains(st.stationuuid)
+                            val isWorking = state.workingStationIds.contains(st.stationuuid)
+                            val isFavorite = favoriteIds.contains(st.stationuuid)
+                            val isCurrentStation = currentPlayingId == st.stationuuid
+                            val isCurrentlyPlaying = isCurrentStation && isPlaying
+                            val isCurrentlyBuffering = isCurrentStation && isBuffering
+                            
+                            StationRow(
+                                st = st,
+                                hasFailed = hasFailed,
+                                isWorking = isWorking,
+                                isFavorite = isFavorite,
+                                isPlaying = isCurrentlyPlaying,
+                                isBuffering = isCurrentlyBuffering,
+                                onRowClick = { 
+                                    playStation(st, filteredStations)
+                                },
+                                onFavorite = { vm.toggleFavorite(st) }
+                            )
                         }
                     }
                 }
