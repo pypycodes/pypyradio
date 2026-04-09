@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -116,6 +117,34 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             
             Spacer(Modifier.height(16.dp))
             
+            // Disclaimer about free radio stations
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "⚠️ Disclaimer",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "pypyradio streams free internet radio stations from around the world. " +
+                        "These stations are operated by independent broadcasters and may occasionally " +
+                        "be unavailable, change URLs, or go offline permanently.\n\n" +
+                        "We do not control the content or availability of these stations. " +
+                        "If a station doesn't work, try another one or check back later.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
             // Credits & Inspiration
             Card(
                 modifier = Modifier.fillMaxWidth()
@@ -142,7 +171,7 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             
             Spacer(Modifier.height(16.dp))
             
-            // Open Source
+            // Open Source & Links
             Card(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -158,6 +187,69 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         "Feel free to contribute, report issues, or fork the project.",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Spacer(Modifier.height(12.dp))
+                    
+                    // GitHub link
+                    val uriHandler = LocalUriHandler.current
+                    TextButton(
+                        onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio") }
+                    ) {
+                        Text("View on GitHub →")
+                    }
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            // Privacy & Content Rating
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Privacy & Content",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                "E",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Rated Everyone - Family Friendly",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "This app does not collect any personal data. " +
+                        "No ads, no tracking, no analytics.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(Modifier.height(8.dp))
+                    val uriHandler = LocalUriHandler.current
+                    TextButton(
+                        onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio/blob/main/privacypolicy.html") }
+                    ) {
+                        Text("Privacy Policy →")
+                    }
                 }
             }
             

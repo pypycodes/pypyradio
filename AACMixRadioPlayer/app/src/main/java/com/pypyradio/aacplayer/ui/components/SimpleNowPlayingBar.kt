@@ -1,6 +1,8 @@
 package com.pypyradio.aacplayer.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -14,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
@@ -105,115 +109,176 @@ fun SimpleNowPlayingBar(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 12.dp,
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Favorite button
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else LocalContentColor.current
+        Column {
+            // Progress indicator for buffering/playing
+            if (isBuffering || isReconnecting) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (isPlaying) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
             
-            // Title and status
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title ?: "",
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = when {
-                        hasError -> "Failed - tap to retry"
-                        isReconnecting -> "Reconnecting..."
-                        isBuffering -> "Loading..."
-                        isPlaying -> "Playing"
-                        isStopped -> "Stopped - tap to play"
-                        else -> "Paused"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when {
-                        hasError -> MaterialTheme.colorScheme.error
-                        isReconnecting -> MaterialTheme.colorScheme.tertiary
-                        isPlaying -> MaterialTheme.colorScheme.primary
-                        isStopped -> MaterialTheme.colorScheme.tertiary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-
-            // Controls
             Row(
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Previous
+                // Favorite button with animation
                 IconButton(
-                    onClick = { player.seekToPreviousMediaItem() },
-                    enabled = hasPrevious
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
+                    Icon(
+                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                Spacer(Modifier.width(8.dp))
+                
+                // Title and status
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = title ?: "",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Status dot
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    color = when {
+                                        hasError -> MaterialTheme.colorScheme.error
+                                        isReconnecting || isBuffering -> MaterialTheme.colorScheme.tertiary
+                                        isPlaying -> Color(0xFF4CAF50)
+                                        else -> MaterialTheme.colorScheme.outline
+                                    },
+                                    shape = CircleShape
+                                )
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = when {
+                                hasError -> "Connection failed"
+                                isReconnecting -> "Reconnecting..."
+                                isBuffering -> "Buffering..."
+                                isPlaying -> "Live"
+                                isStopped -> "Stopped"
+                                else -> "Paused"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
-                // Play/Pause
-                IconButton(
-                    onClick = {
-                        if (hasError) {
-                            // If there's an error, try to prepare and play again
-                            player.prepare()
-                            player.play()
-                        } else if (isPlaying) {
-                            player.pause()
-                        } else {
-                            // If stopped/idle, prepare first then play
-                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                Spacer(Modifier.width(8.dp))
+
+                // Controls - more compact and modern
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Previous
+                    FilledTonalIconButton(
+                        onClick = { player.seekToPreviousMediaItem() },
+                        enabled = hasPrevious,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SkipPrevious, 
+                            contentDescription = "Previous",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Play/Pause - larger and prominent
+                    FilledIconButton(
+                        onClick = {
+                            if (hasError) {
                                 player.prepare()
+                                player.play()
+                            } else if (isPlaying) {
+                                player.pause()
+                            } else {
+                                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                                    player.prepare()
+                                }
+                                player.play()
                             }
-                            player.play()
+                        },
+                        modifier = Modifier.size(48.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        if (isBuffering) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
                         }
                     }
-                ) {
-                    if (isBuffering) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+
+                    // Next
+                    FilledTonalIconButton(
+                        onClick = { player.seekToNextMediaItem() },
+                        enabled = hasNext,
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
-                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play"
+                            Icons.Default.SkipNext, 
+                            contentDescription = "Next",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                }
 
-                // Next
-                IconButton(
-                    onClick = { player.seekToNextMediaItem() },
-                    enabled = hasNext
-                ) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next")
-                }
-
-                // Stop
-                IconButton(
-                    onClick = { 
-                        player.stop()
-                        player.clearMediaItems()
+                    // Stop
+                    IconButton(
+                        onClick = { 
+                            player.stop()
+                            player.clearMediaItems()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Stop, 
+                            contentDescription = "Stop",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop")
                 }
             }
         }

@@ -129,7 +129,8 @@ class RadioPlaybackService : MediaLibraryService() {
                         // Check if it's a podcast ID - load episodes
                         if (parentId.startsWith("podcast_")) {
                             val podcastId = parentId.removePrefix("podcast_")
-                            podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it) } ?: run {
+                            // Don't include URI for browsing - only for playback
+                            podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it, includeUri = false) } ?: run {
                                 // Load episodes async and return empty for now
                                 scope.launch(Dispatchers.IO) {
                                     loadPodcastEpisodes(podcastId)
@@ -152,7 +153,7 @@ class RadioPlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
-            // Resolve media items for Android Auto playback
+            // Resolve media items for Android Auto playback - include URIs for actual playback
             val resolvedItems = mediaItems.mapNotNull { requestedItem ->
                 val mediaId = requestedItem.mediaId
                 // Check if it's a podcast episode
@@ -162,12 +163,12 @@ class RadioPlaybackService : MediaLibraryService() {
                         playableFromEpisode(it)
                     }
                 } else {
-                    // Find station in our lists
+                    // Find station in our lists and include URI for playback
                     val station = topStations.find { it.stationuuid == mediaId }
                         ?: topHindiStations.find { it.stationuuid == mediaId }
                         ?: topEnglishStations.find { it.stationuuid == mediaId }
                         ?: favoriteStations.find { it.stationuuid == mediaId }
-                    station?.let { playableFromStation(it) }
+                    station?.let { playableFromStation(it, includeUri = true) }
                 }
             }.toMutableList()
             
@@ -201,16 +202,16 @@ class RadioPlaybackService : MediaLibraryService() {
             // Single item without URI - Android Auto browsing request
             // Determine which playlist context this station belongs to and expand for next/prev
             if (mediaItems.size == 1 && mediaItems[0].localConfiguration == null) {
-                // Find which list contains this station and build full playlist
+                // Find which list contains this station and build full playlist WITH URIs for playback
                 val (playlist, context) = when {
                     topHindiStations.any { it.stationuuid == id } -> 
-                        topHindiStations.map { playableFromStation(it) } to MEDIA_ID_HINDI
+                        topHindiStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_HINDI
                     topEnglishStations.any { it.stationuuid == id } -> 
-                        topEnglishStations.map { playableFromStation(it) } to MEDIA_ID_ENGLISH
+                        topEnglishStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_ENGLISH
                     favoriteStations.any { it.stationuuid == id } -> 
-                        favoriteStations.map { playableFromStation(it) } to MEDIA_ID_FAV
+                        favoriteStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_FAV
                     topStations.any { it.stationuuid == id } -> 
-                        topStations.map { playableFromStation(it) } to MEDIA_ID_TOP
+                        topStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_TOP
                     else -> {
                         // Check podcast episodes
                         val episode = podcastEpisodesCache.entries.find { (_, eps) -> 
@@ -241,22 +242,34 @@ class RadioPlaybackService : MediaLibraryService() {
         super.onCreate()
         
         // Acquire WiFi lock to keep WiFi active when screen is off
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        @Suppress("DEPRECATION")
-        val wifiMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-        } else {
-            WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            if (wifiManager != null) {
+                @Suppress("DEPRECATION")
+                val wifiMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
+                wifiLock?.setReferenceCounted(false)
+                wifiLock?.acquire()
+            }
+        } catch (e: Exception) {
+            // WiFi lock not critical - continue without it
         }
-        wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
-        wifiLock?.setReferenceCounted(false)
-        wifiLock?.acquire()
         
         // Acquire partial wake lock to keep CPU running for network operations
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pypyradio:wakelock")
-        wakeLock?.setReferenceCounted(false)
-        wakeLock?.acquire()
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager != null) {
+                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pypyradio:wakelock")
+                wakeLock?.setReferenceCounted(false)
+                wakeLock?.acquire()
+            }
+        } catch (e: Exception) {
+            // Wake lock not critical - continue without it
+        }
 
         // Create notification channel for Android 8+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -484,15 +497,14 @@ class RadioPlaybackService : MediaLibraryService() {
             .build()
     }
 
-    private fun playableFromStation(st: Station): MediaItem {
+    private fun playableFromStation(st: Station, includeUri: Boolean = false): MediaItem {
         // Build artwork URI from favicon if available
         val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let { 
             android.net.Uri.parse(it) 
         }
         
-        return MediaItem.Builder()
+        val builder = MediaItem.Builder()
             .setMediaId(st.stationuuid)
-            .setUri(st.urlResolved)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(st.name)
@@ -504,7 +516,13 @@ class RadioPlaybackService : MediaLibraryService() {
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                     .build()
             )
-            .build()
+        
+        // Only include URI when actually playing, not for browsing
+        if (includeUri && st.urlResolved.isNotBlank()) {
+            builder.setUri(st.urlResolved)
+        }
+        
+        return builder.build()
     }
 
     private fun browsableFromPodcast(podcast: Podcast): MediaItem {
@@ -527,14 +545,13 @@ class RadioPlaybackService : MediaLibraryService() {
             .build()
     }
     
-    private fun playableFromEpisode(episode: PodcastEpisode): MediaItem {
+    private fun playableFromEpisode(episode: PodcastEpisode, includeUri: Boolean = true): MediaItem {
         val artworkUri = episode.imageUrl?.takeIf { it.isNotBlank() }?.let {
             android.net.Uri.parse(it)
         }
         
-        return MediaItem.Builder()
+        val builder = MediaItem.Builder()
             .setMediaId("episode_${episode.id}")
-            .setUri(episode.audioUrl)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(episode.title)
@@ -546,7 +563,13 @@ class RadioPlaybackService : MediaLibraryService() {
                     .setMediaType(MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE)
                     .build()
             )
-            .build()
+        
+        // Only include URI when actually playing
+        if (includeUri && !episode.audioUrl.isNullOrBlank()) {
+            builder.setUri(episode.audioUrl)
+        }
+        
+        return builder.build()
     }
 
     companion object {
