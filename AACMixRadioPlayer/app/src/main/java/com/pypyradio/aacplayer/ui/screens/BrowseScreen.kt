@@ -12,14 +12,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,9 +74,7 @@ private val NEWS_LANGUAGES = listOf(
 fun BrowseScreen(
     vm: StationsViewModel,
     player: Player,
-    onGoFavorites: () -> Unit, 
-    onGoAbout: () -> Unit, 
-    onGoPodcasts: () -> Unit,
+    onGoAbout: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {
@@ -143,6 +140,27 @@ fun BrowseScreen(
         onDispose { player.removeListener(listener) }
     }
     
+    // Helper function to create a MediaItem from a Station
+    fun createMediaItem(station: Station): androidx.media3.common.MediaItem {
+        val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
+            android.net.Uri.parse(it)
+        }
+        return androidx.media3.common.MediaItem.Builder()
+            .setMediaId(station.stationuuid)
+            .setUri(station.urlResolved)
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(station.name)
+                    .setArtist(station.countryCode ?: "Radio")
+                    .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                    .setArtworkUri(artworkUri)
+                    .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .setIsPlayable(true)
+                    .build()
+            )
+            .build()
+    }
+    
     // Function to play a station with debouncing
     fun playStation(st: Station, stationList: List<Station> = state.stations) {
         val now = System.currentTimeMillis()
@@ -175,41 +193,21 @@ fun BrowseScreen(
                 player.stop()
                 player.clearMediaItems()
                 
-                // Use the ENTIRE station list for next/prev navigation
-                // Filter out stations with blank URLs
-                val validStations = stationList.filter { it.urlResolved.isNotBlank() }
+                // CRITICAL: Always create the tapped station's media item FIRST
+                val tappedMediaItem = createMediaItem(st)
                 
-                // Find the index of the tapped station in the valid list
-                val playlistIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
+                // Get other valid stations for next/prev (excluding the tapped one)
+                val otherStations = stationList
+                    .filter { it.urlResolved.isNotBlank() && it.stationuuid != st.stationuuid }
                 
-                // Build media items for ALL valid stations
-                val mediaItems = validStations.map { station ->
-                    val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
-                        android.net.Uri.parse(it)
-                    }
-                    androidx.media3.common.MediaItem.Builder()
-                        .setMediaId(station.stationuuid)
-                        .setUri(station.urlResolved)
-                        .setMediaMetadata(
-                            androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(station.name)
-                                .setArtist(station.countryCode ?: "Radio")
-                                .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                                .setArtworkUri(artworkUri)
-                                .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
-                                .setIsPlayable(true)
-                                .build()
-                        )
-                        .build()
-                }
+                // Build playlist: tapped station at index 0, others after
+                val allMediaItems = mutableListOf(tappedMediaItem)
+                allMediaItems.addAll(otherStations.map { createMediaItem(it) })
                 
-                if (mediaItems.isNotEmpty()) {
-                    // If station found in list, start at that index; otherwise start at 0
-                    val startIndex = if (playlistIndex >= 0) playlistIndex else 0
-                    player.setMediaItems(mediaItems, startIndex, 0L)
-                    player.prepare()
-                    player.play()
-                }
+                // Play starting at index 0 (the tapped station)
+                player.setMediaItems(allMediaItems, 0, 0L)
+                player.prepare()
+                player.play()
                 
                 // Update local state
                 currentPlayingId = st.stationuuid
@@ -260,17 +258,6 @@ fun BrowseScreen(
             }
         }
     }
-    
-    // Function to play random station
-    fun playRandom() {
-        val availableStations = state.stations.filter { 
-            !state.failedStationIds.contains(it.stationuuid) 
-        }
-        if (availableStations.isNotEmpty()) {
-            val randomStation = availableStations.random()
-            playStation(randomStation)
-        }
-    }
 
     // Tab state - default to English
     var selectedTab by remember { mutableStateOf(MainTab.ENGLISH) }
@@ -301,62 +288,23 @@ fun BrowseScreen(
                                     )
                                 }
                                 Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        "pypyradio",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Free Internet Radio",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Text(
+                                    "pypyradio",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                             }
                         },
                         actions = {
-                            // Shuffle button
-                            FilledTonalIconButton(
-                                onClick = { playRandom() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
+                            // About/Info button
+                            IconButton(onClick = onGoAbout) {
                                 Icon(
-                                    Icons.Default.Shuffle, 
-                                    contentDescription = "Play Random",
-                                    modifier = Modifier.size(20.dp)
+                                    Icons.Default.Info,
+                                    contentDescription = "About",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(Modifier.width(4.dp))
-                            // Favorites button
-                            FilledTonalIconButton(
-                                onClick = onGoFavorites,
-                                modifier = Modifier.size(40.dp),
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = Color(0xFFFFE0E0)
-                                )
-                            ) {
-                                Icon(
-                                    Icons.Default.Favorite, 
-                                    contentDescription = "Favorites", 
-                                    tint = Color(0xFFE91E63),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            // Podcast button
-                            FilledTonalIconButton(
-                                onClick = onGoPodcasts,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Podcasts, 
-                                    contentDescription = "Podcasts",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent
@@ -607,37 +555,52 @@ fun BrowseScreen(
                 }
             }
 
-            when {
-                state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Error: ${state.error}")
-                }
-                else -> {
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        items(paginatedStations, key = { it.stationuuid }) { st ->
-                            val hasFailed = state.failedStationIds.contains(st.stationuuid)
-                            val isWorking = state.workingStationIds.contains(st.stationuuid)
-                            val isFavorite = favoriteIds.contains(st.stationuuid)
-                            val isCurrentStation = currentPlayingId == st.stationuuid
-                            val isCurrentlyPlaying = isCurrentStation && isPlaying
-                            val isCurrentlyBuffering = isCurrentStation && isBuffering
-                            
-                            StationRow(
-                                st = st,
-                                hasFailed = hasFailed,
-                                isWorking = isWorking,
-                                isFavorite = isFavorite,
-                                isPlaying = isCurrentlyPlaying,
-                                isBuffering = isCurrentlyBuffering,
-                                onRowClick = { 
-                                    // Pass filteredStations for next/prev navigation
-                                    // The tapped station (st) is already the correct one
-                                    playStation(st, filteredStations)
-                                },
-                                onFavorite = { vm.toggleFavorite(st) }
+            @OptIn(ExperimentalMaterial3Api::class)
+            PullToRefreshBox(
+                isRefreshing = state.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when {
+                    state.loading && state.stations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Failed to load",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(onClick = { vm.refresh() }) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                    else -> {
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(paginatedStations, key = { it.stationuuid }) { st ->
+                                val hasFailed = state.failedStationIds.contains(st.stationuuid)
+                                val isWorking = state.workingStationIds.contains(st.stationuuid)
+                                val isFavorite = favoriteIds.contains(st.stationuuid)
+                                val isCurrentStation = currentPlayingId == st.stationuuid
+                                val isCurrentlyPlaying = isCurrentStation && isPlaying
+                                val isCurrentlyBuffering = isCurrentStation && isBuffering
+                                
+                                StationRow(
+                                    st = st,
+                                    hasFailed = hasFailed,
+                                    isWorking = isWorking,
+                                    isFavorite = isFavorite,
+                                    isPlaying = isCurrentlyPlaying,
+                                    isBuffering = isCurrentlyBuffering,
+                                    onRowClick = { 
+                                        playStation(st, filteredStations)
+                                    },
+                                    onFavorite = { vm.toggleFavorite(st) }
+                                )
+                            }
                         }
                     }
                 }

@@ -50,6 +50,15 @@ class PodcastViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _state.value = _state.value.copy(loading = false, podcasts = emptyList(), error = it.message ?: "Failed to load") }
     }
     
+    fun refresh() {
+        // Reload current data
+        if (_state.value.query.isNotEmpty()) {
+            search()
+        } else {
+            loadTrending()
+        }
+    }
+    
     fun search() = viewModelScope.launch {
         val q = _state.value.query.trim()
         if (q.isEmpty()) {
