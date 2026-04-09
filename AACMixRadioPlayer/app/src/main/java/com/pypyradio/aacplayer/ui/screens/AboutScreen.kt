@@ -176,7 +176,7 @@ private fun PermissionItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        crossAxisAlignment = Alignment.Top
+        verticalAlignment = Alignment.Top
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
