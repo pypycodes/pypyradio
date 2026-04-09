@@ -62,7 +62,7 @@ fun PodcastScreen(
         onDispose { player.removeListener(listener) }
     }
     
-    fun playEpisode(episode: PodcastEpisode) {
+    fun playEpisode(episode: PodcastEpisode, episodeList: List<PodcastEpisode>) {
         // Toggle play/pause if same episode
         if (currentPlayingId == episode.id) {
             if (player.isPlaying) {
@@ -76,20 +76,39 @@ fun PodcastScreen(
             return
         }
         
-        // Play single episode
+        // Build playlist from episode list for next/prev support
         player.stop()
         player.clearMediaItems()
-        val mediaItem = MediaItem.Builder()
-            .setMediaId(episode.id)
-            .setUri(episode.audioUrl)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(episode.title)
-                    .setArtist(episode.podcastTitle ?: episode.author)
+        
+        if (episodeList.isNotEmpty()) {
+            val mediaItems = episodeList.map { ep ->
+                MediaItem.Builder()
+                    .setMediaId(ep.id)
+                    .setUri(ep.audioUrl)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(ep.title)
+                            .setArtist(ep.podcastTitle ?: ep.author)
+                            .build()
+                    )
                     .build()
-            )
-            .build()
-        player.setMediaItem(mediaItem)
+            }
+            val startIndex = episodeList.indexOf(episode).coerceAtLeast(0)
+            player.setMediaItems(mediaItems, startIndex, 0L)
+        } else {
+            // Fallback to single episode
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(episode.id)
+                .setUri(episode.audioUrl)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(episode.title)
+                        .setArtist(episode.podcastTitle ?: episode.author)
+                        .build()
+                )
+                .build()
+            player.setMediaItem(mediaItem)
+        }
         player.prepare()
         player.play()
         currentPlayingId = episode.id
@@ -282,7 +301,7 @@ fun PodcastScreen(
                                 EpisodeRow(
                                     episode = episode,
                                     isPlaying = isCurrentPlaying,
-                                    onClick = { playEpisode(episode) }
+                                    onClick = { playEpisode(episode, state.episodes) }
                                 )
                             }
                         }

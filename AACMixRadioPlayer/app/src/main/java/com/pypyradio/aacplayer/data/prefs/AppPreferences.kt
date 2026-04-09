@@ -9,7 +9,7 @@ class AppPreferences(context: Context) {
     
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     
-    private val _autoSkipEnabled = MutableStateFlow(prefs.getBoolean(KEY_AUTO_SKIP, false))
+    private val _autoSkipEnabled = MutableStateFlow(prefs.getBoolean(KEY_AUTO_SKIP, true))
     val autoSkipEnabled: StateFlow<Boolean> = _autoSkipEnabled
     
     fun setAutoSkipEnabled(enabled: Boolean) {
@@ -17,7 +17,7 @@ class AppPreferences(context: Context) {
         _autoSkipEnabled.value = enabled
     }
     
-    fun isAutoSkipEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_SKIP, false)
+    fun isAutoSkipEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_SKIP, true)
     
     companion object {
         private const val PREFS_NAME = "pypyradio_prefs"

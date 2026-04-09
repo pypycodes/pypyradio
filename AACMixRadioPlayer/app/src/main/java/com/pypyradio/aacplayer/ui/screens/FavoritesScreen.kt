@@ -69,24 +69,6 @@ fun FavoritesScreen(
                 isPlaying = p.isPlaying
             }
             
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val failedId = player.currentMediaItem?.mediaId
-                if (failedId != null) {
-                    vm.markStationFailed(failedId, error.message ?: "Playback error")
-                    if (player.hasNextMediaItem()) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Skipping unavailable...",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                        player.seekToNextMediaItem()
-                        player.prepare()
-                        player.play()
-                    }
-                }
-            }
-            
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     currentPlayingId?.let { vm.markStationWorking(it) }
@@ -150,8 +132,7 @@ fun FavoritesScreen(
             player.clearMediaItems()
             
             val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
-            val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
-                .coerceAtLeast(0)
+            val startIndex = validRadioFavs.indexOf(st).coerceAtLeast(0)
             
             player.setMediaItems(mediaItems, startIndex, 0L)
             player.prepare()
