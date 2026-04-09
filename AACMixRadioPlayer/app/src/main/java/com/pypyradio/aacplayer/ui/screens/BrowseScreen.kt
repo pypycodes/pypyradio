@@ -128,7 +128,8 @@ fun BrowseScreen(
             player.clearMediaItems()
             
             val mediaItems = stationList.map { createMediaItem(it) }
-            val startIndex = stationList.indexOf(st).coerceAtLeast(0)
+            val startIndex = stationList.indexOfFirst { it.stationuuid == st.stationuuid }
+                .coerceAtLeast(0)
             
             player.setMediaItems(mediaItems, startIndex, 0L)
             player.prepare()

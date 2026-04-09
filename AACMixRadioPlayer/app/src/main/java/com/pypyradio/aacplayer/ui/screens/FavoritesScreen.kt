@@ -49,7 +49,6 @@ fun FavoritesScreen(
     val podcastFavs by podcastVm.favorites.collectAsState()
     val podcastState by podcastVm.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     
     // Filter out failed stations from favorites
     val validRadioFavs = remember(radioFavs, failedStationIds) {
@@ -132,7 +131,8 @@ fun FavoritesScreen(
             player.clearMediaItems()
             
             val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
-            val startIndex = validRadioFavs.indexOf(st).coerceAtLeast(0)
+            val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
+                .coerceAtLeast(0)
             
             player.setMediaItems(mediaItems, startIndex, 0L)
             player.prepare()
