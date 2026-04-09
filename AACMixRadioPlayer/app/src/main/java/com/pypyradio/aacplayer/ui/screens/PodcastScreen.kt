@@ -85,6 +85,11 @@ fun PodcastScreen(
                 MediaItem.Builder()
                     .setMediaId(ep.id)
                     .setUri(ep.audioUrl)
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(android.net.Uri.parse(ep.audioUrl))
+                            .build()
+                    )
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(ep.title)
@@ -100,6 +105,11 @@ fun PodcastScreen(
             val mediaItem = MediaItem.Builder()
                 .setMediaId(episode.id)
                 .setUri(episode.audioUrl)
+                .setRequestMetadata(
+                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(android.net.Uri.parse(episode.audioUrl))
+                        .build()
+                )
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(episode.title)

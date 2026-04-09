@@ -30,6 +30,7 @@ import com.pypyradio.aacplayer.playback.RadioPlaybackService
 import com.pypyradio.aacplayer.ui.components.SimpleNowPlayingBar
 import com.pypyradio.aacplayer.ui.components.SleepTimerButton
 import com.pypyradio.aacplayer.ui.components.SleepTimerDialog
+import com.pypyradio.aacplayer.ui.components.FullScreenPlayer
 import com.pypyradio.aacplayer.ui.components.rememberSleepTimerState
 import com.pypyradio.aacplayer.ui.screens.AboutScreen
 import com.pypyradio.aacplayer.ui.screens.BrowseScreen
@@ -48,8 +49,9 @@ private enum class MainNavTab(
     FAVORITES("Favorites", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot() {
+fun AppRoot(vm: StationsViewModel = viewModel()) {
     var selectedTab by remember { mutableStateOf(MainNavTab.RADIO) }
     var showAbout by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
@@ -59,7 +61,11 @@ fun AppRoot() {
     val context = LocalContext.current
     val activity = context as? Activity
     
-    val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+    val colorScheme = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        if (darkTheme) darkColorScheme() else lightColorScheme()
+    }
     
     // Connect to RadioPlaybackService via MediaController for background playback
     var controller by remember { mutableStateOf<MediaController?>(null) }
@@ -137,7 +143,6 @@ fun AppRoot() {
     }
 
     MaterialTheme(colorScheme = colorScheme) {
-        val vm: StationsViewModel = viewModel()
         val favorites by vm.favorites.collectAsState()
         val favoriteIds = remember(favorites) { favorites.map { it.stationuuid }.toSet() }
         
@@ -159,6 +164,8 @@ fun AppRoot() {
             AboutScreen(onBack = { showAbout = false })
             return@MaterialTheme
         }
+        
+        var showFullScreenPlayer by remember { mutableStateOf(false) }
         
         // Sleep timer state
         val sleepTimerState = rememberSleepTimerState(
@@ -202,7 +209,8 @@ fun AppRoot() {
                                 vm.markStationFailed(failedMediaId, "Playback failed")
                             },
                             sleepTimerMinutes = sleepTimerState.remainingMinutes,
-                            onSleepTimerClick = sleepTimerState.onShowDialog
+                            onSleepTimerClick = sleepTimerState.onShowDialog,
+                            onClick = { showFullScreenPlayer = true }
                         )
                     }
                     
@@ -250,6 +258,28 @@ fun AppRoot() {
                     player = player,
                     modifier = Modifier.padding(padding)
                 )
+            }
+            
+            if (showFullScreenPlayer && player != null) {
+                ModalBottomSheet(
+                    onDismissRequest = { showFullScreenPlayer = false },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                ) {
+                    FullScreenPlayer(
+                        player = player,
+                        isFavorite = isCurrentFavorite,
+                        onToggleFavorite = {
+                            currentMediaId?.let { mediaId ->
+                                val station = favorites.find { it.stationuuid == mediaId }
+                                if (station != null) vm.toggleFavorite(station)
+                                else vm.browse.value.stations.find { it.stationuuid == mediaId }?.let { st -> vm.toggleFavorite(st) }
+                            }
+                        },
+                        sleepTimerMinutes = sleepTimerState.remainingMinutes ?: 0,
+                        onSleepTimerClick = sleepTimerState.onShowDialog,
+                        onDismiss = { showFullScreenPlayer = false }
+                    )
+                }
             }
         }
     }
