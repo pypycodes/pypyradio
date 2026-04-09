@@ -52,41 +52,13 @@ fun BrowseScreen(
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
     
-    // Listen to player state with auto-skip on error
+    // Listen to player state
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
                 isBuffering = p.playbackState == Player.STATE_BUFFERING
-            }
-            
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val failedId = player.currentMediaItem?.mediaId
-                if (failedId != null) {
-                    // Mark station as failed
-                    vm.markStationFailed(failedId, error.message ?: "Playback error")
-                    
-                    // Auto-skip to next station
-                    if (player.hasNextMediaItem()) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Skipping unavailable station...",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                        player.seekToNextMediaItem()
-                        player.prepare()
-                        player.play()
-                    } else {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Station unavailable",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    }
-                }
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -156,8 +128,7 @@ fun BrowseScreen(
             player.clearMediaItems()
             
             val mediaItems = stationList.map { createMediaItem(it) }
-            val startIndex = stationList.indexOfFirst { it.stationuuid == st.stationuuid }
-                .coerceAtLeast(0)
+            val startIndex = stationList.indexOf(st).coerceAtLeast(0)
             
             player.setMediaItems(mediaItems, startIndex, 0L)
             player.prepare()
