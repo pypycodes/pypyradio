@@ -27,8 +27,8 @@ android {
         applicationId = "com.pypyradio.aacplayer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 50
-        versionName = "1.0.50"
+        versionCode = 51
+        versionName = "1.0.51"
     }
 
     signingConfigs {
