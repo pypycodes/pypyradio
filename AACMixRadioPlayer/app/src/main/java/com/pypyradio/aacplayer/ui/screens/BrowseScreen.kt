@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,10 +107,10 @@ fun BrowseScreen(
                 currentPlayingId?.let { failedId ->
                     vm.markStationFailed(failedId, "Playback failed")
                     // The service might be retrying, but if we get an error bubble up, we can also try to skip
-                    if (p.hasNextMediaItem()) {
-                        p.seekToNextMediaItem()
-                        p.prepare()
-                        p.play()
+                    if (player.hasNextMediaItem()) {
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        player.play()
                     }
                 }
             }
@@ -468,7 +469,7 @@ private fun StationRow(
                         color = Color.White
                     ) {
                         Icon(
-                            androidx.compose.material.icons.filled.Warning,
+                            Icons.Default.Warning,
                             contentDescription = "Failed",
                             modifier = Modifier.padding(1.dp),
                             tint = Color(0xFFFFB300) // Yellow/Amber warning mark
