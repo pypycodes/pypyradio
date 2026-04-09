@@ -3,12 +3,13 @@ package com.pypyradio.aacplayer
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.pypyradio.aacplayer.ui.AppRoot
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        androidx.core.splashscreen.SplashScreen.installSplashScreen(this)
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContent { AppRoot() }
     }
