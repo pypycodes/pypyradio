@@ -1,61 +1,36 @@
 package com.pypyradio.aacplayer.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
 import kotlinx.coroutines.launch
 
-// Country groups
-private enum class CountryGroup { INDIA, ENGLISH, WORLD }
-
-private val COUNTRY_GROUPS = mapOf(
-    CountryGroup.INDIA to listOf("India" to "IN"),
-    CountryGroup.ENGLISH to listOf(
-        "USA" to "US",
-        "UK" to "GB",
-        "Canada" to "CA",
-        "Australia" to "AU",
-        "New Zealand" to "NZ",
-        "Ireland" to "IE"
-    ),
-    CountryGroup.WORLD to listOf(
-        "Germany" to "DE",
-        "France" to "FR",
-        "Spain" to "ES",
-        "Italy" to "IT",
-        "Netherlands" to "NL",
-        "Brazil" to "BR",
-        "Japan" to "JP",
-        "Russia" to "RU"
-    )
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,140 +124,62 @@ fun BrowseScreen(
             .build()
     }
     
-    // Function to play a station with debouncing
-    fun playStation(st: Station, stationList: List<Station> = state.stations) {
+    // Play a single station directly
+    fun playStation(st: Station) {
         val now = System.currentTimeMillis()
-        // Debounce: ignore rapid taps within 500ms
-        if (now - lastPlayTime < 500) {
-            return
-        }
+        if (now - lastPlayTime < 500) return
         lastPlayTime = now
         
         val url = st.urlResolved
-        if (url.isNotBlank()) {
-            // If same station is playing, toggle play/pause
-            if (currentPlayingId == st.stationuuid) {
-                try {
-                    if (player.isPlaying) {
-                        player.pause()
-                        isPlaying = false
-                    } else {
-                        // Prepare if needed (player might be in IDLE or ENDED state)
-                        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                            player.prepare()
-                        }
-                        player.play()
-                        isPlaying = true
-                    }
-                } catch (e: Exception) {
-                    // Ignore errors on toggle
-                }
-                return
-            }
-            
-            try {
-                // Stop current playback and clear playlist
-                player.stop()
-                player.clearMediaItems()
-                
-                // Build playlist from all valid stations in original order
-                val validStations = stationList.filter { it.urlResolved.isNotBlank() }
-                val mediaItems = validStations.map { createMediaItem(it) }
-                
-                // Find the index of the tapped station
-                val startIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
-                    .coerceAtLeast(0)
-                
-                // Play starting at the tapped station's position
-                player.setMediaItems(mediaItems, startIndex, 0L)
-                player.prepare()
-                player.play()
-                
-                // Update local state
-                currentPlayingId = st.stationuuid
-                isPlaying = true
-            } catch (e: Exception) {
-                // Fallback: try single station directly
-                try {
-                    player.stop()
-                    player.clearMediaItems()
-                    val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let {
-                        android.net.Uri.parse(it)
-                    }
-                    val mediaItem = androidx.media3.common.MediaItem.Builder()
-                        .setMediaId(st.stationuuid)
-                        .setUri(url)
-                        .setMediaMetadata(
-                            androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(st.name)
-                                .setArtist(st.countryCode ?: "Radio")
-                                .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                                .setArtworkUri(artworkUri)
-                                .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
-                                .setIsPlayable(true)
-                                .build()
-                        )
-                        .build()
-                    player.setMediaItem(mediaItem)
+        if (url.isBlank()) {
+            vm.markStationFailed(st.stationuuid, "No stream URL")
+            scope.launch { snackbarHostState.showSnackbar("Station unavailable", duration = SnackbarDuration.Short) }
+            return
+        }
+        
+        // Toggle play/pause if same station
+        if (currentPlayingId == st.stationuuid) {
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                     player.prepare()
-                    player.play()
-                    currentPlayingId = st.stationuuid
-                    isPlaying = true
-                } catch (e2: Exception) {
-                    vm.markStationFailed(st.stationuuid, "Playback error")
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            "Station unavailable - try another one",
-                            duration = SnackbarDuration.Short
-                        )
-                    }
                 }
+                player.play()
             }
-        } else {
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    "Station offline - free stations may change",
-                    duration = SnackbarDuration.Short
-                )
-            }
+            return
+        }
+        
+        // Play new station
+        try {
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaItem(createMediaItem(st))
+            player.prepare()
+            player.play()
+            currentPlayingId = st.stationuuid
+        } catch (e: Exception) {
+            vm.markStationFailed(st.stationuuid, "Playback error")
+            scope.launch { snackbarHostState.showSnackbar("Station unavailable", duration = SnackbarDuration.Short) }
         }
     }
-
-    // Selected group and country
-    var selectedGroup by remember { mutableStateOf(CountryGroup.INDIA) }
-    var selectedCountry by remember { mutableStateOf("IN") }
     
-    // Load India stations on first launch
+    // Load top stations on first launch
     LaunchedEffect(Unit) {
-        vm.searchByCountry("IN")
+        vm.loadTop()
     }
     
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onGoAbout() }
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Icon(
-                                Icons.Default.Radio,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp).padding(6.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            "pypyradio",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        contentDescription = "pypyradio",
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clickable { onGoAbout() }
+                    )
                 },
                 actions = {
                     IconButton(onClick = onGoAbout) {
@@ -341,70 +238,7 @@ fun BrowseScreen(
                 }
             }
             
-            // Group tabs: India | English | World
-            TabRow(
-                selectedTabIndex = CountryGroup.entries.indexOf(selectedGroup),
-                containerColor = MaterialTheme.colorScheme.surface
-            ) {
-                Tab(
-                    selected = selectedGroup == CountryGroup.INDIA,
-                    onClick = { 
-                        selectedGroup = CountryGroup.INDIA
-                        selectedCountry = "IN"
-                        vm.searchByCountry("IN")
-                    },
-                    text = { Text("India") }
-                )
-                Tab(
-                    selected = selectedGroup == CountryGroup.ENGLISH,
-                    onClick = { 
-                        selectedGroup = CountryGroup.ENGLISH
-                        val firstCountry = COUNTRY_GROUPS[CountryGroup.ENGLISH]?.firstOrNull()
-                        if (firstCountry != null) {
-                            selectedCountry = firstCountry.second
-                            vm.searchByCountry(firstCountry.second)
-                        }
-                    },
-                    text = { Text("English") }
-                )
-                Tab(
-                    selected = selectedGroup == CountryGroup.WORLD,
-                    onClick = { 
-                        selectedGroup = CountryGroup.WORLD
-                        val firstCountry = COUNTRY_GROUPS[CountryGroup.WORLD]?.firstOrNull()
-                        if (firstCountry != null) {
-                            selectedCountry = firstCountry.second
-                            vm.searchByCountry(firstCountry.second)
-                        }
-                    },
-                    text = { Text("World") }
-                )
-            }
-            
-            // Country chips for selected group (only show if more than 1 country)
-            val countriesInGroup = COUNTRY_GROUPS[selectedGroup] ?: emptyList()
-            if (countriesInGroup.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    countriesInGroup.forEach { (name, code) ->
-                        FilterChip(
-                            selected = selectedCountry == code,
-                            onClick = { 
-                                selectedCountry = code
-                                vm.searchByCountry(code)
-                            },
-                            label = { Text(name) }
-                        )
-                    }
-                }
-            }
-            
-            // Filter out failed stations from display AND playlist
+            // Filter out failed stations
             val displayStations = remember(state.stations, state.failedStationIds) {
                 state.stations.filter { 
                     !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
@@ -414,26 +248,30 @@ fun BrowseScreen(
             // Station count
             if (!state.loading && state.error == null && displayStations.isNotEmpty()) {
                 Text(
-                    "${displayStations.size} stations",
+                    "${displayStations.size} stations • Search to find more",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
             }
 
             when {
-                state.loading && state.stations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
                 state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Failed to load", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = { vm.searchByCountry(selectedCountry) }) { Text("Retry") }
+                        TextButton(onClick = { vm.loadTop() }) { Text("Retry") }
                     }
                 }
                 displayStations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No stations found", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No stations found", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Try a different search", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    }
                 }
                 else -> {
                     LazyColumn(Modifier.fillMaxSize()) {
@@ -448,7 +286,7 @@ fun BrowseScreen(
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
-                                onRowClick = { playStation(st, displayStations) },
+                                onRowClick = { playStation(st) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
                         }

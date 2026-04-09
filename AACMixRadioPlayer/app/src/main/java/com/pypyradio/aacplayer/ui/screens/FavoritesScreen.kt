@@ -126,49 +126,44 @@ fun FavoritesScreen(
         lastPlayTime = now
         
         val url = st.urlResolved
-        if (url.isNotBlank()) {
-            if (currentPlayingId == st.stationuuid) {
-                try { 
-                    if (player.isPlaying) {
-                        player.pause()
-                    } else {
-                        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                            player.prepare()
-                        }
-                        player.play()
-                    }
-                } catch (e: Exception) {}
-                return
-            }
-            
-            try {
-                player.stop()
-                player.clearMediaItems()
-                
-                // Build playlist from valid stations (excluding failed ones)
-                val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
-                
-                // Find the index of the tapped station
-                val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
-                    .coerceAtLeast(0)
-                
-                player.setMediaItems(mediaItems, startIndex, 0L)
-                player.prepare()
-                player.play()
-            } catch (e: Exception) {
-                // Fallback
-                try {
-                    player.stop()
-                    player.clearMediaItems()
-                    player.setMediaItem(createStationMediaItem(st))
+        if (url.isBlank()) {
+            vm.markStationFailed(st.stationuuid, "No stream URL")
+            return
+        }
+        
+        // Toggle play/pause if same station
+        if (currentPlayingId == st.stationuuid) {
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                     player.prepare()
-                    player.play()
-                } catch (e2: Exception) {}
+                }
+                player.play()
             }
+            return
+        }
+        
+        // Build playlist from all valid favorites for next/prev support
+        try {
+            player.stop()
+            player.clearMediaItems()
+            
+            val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
+            val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
+                .coerceAtLeast(0)
+            
+            player.setMediaItems(mediaItems, startIndex, 0L)
+            player.prepare()
+            player.play()
+            currentPlayingId = st.stationuuid
+        } catch (e: Exception) {
+            vm.markStationFailed(st.stationuuid, "Playback error")
         }
     }
     
-    fun playEpisode(episode: PodcastEpisode, allEpisodes: List<PodcastEpisode>) {
+    fun playEpisode(episode: PodcastEpisode) {
+        // Toggle play/pause if same episode
         if (currentPlayingId == episode.id) {
             if (player.isPlaying) {
                 player.pause()
@@ -181,29 +176,23 @@ fun FavoritesScreen(
             return
         }
         
+        // Play single episode
         player.stop()
         player.clearMediaItems()
-        
-        // Build playlist in original order
-        val mediaItems = allEpisodes.map { ep ->
-            MediaItem.Builder()
-                .setMediaId(ep.id)
-                .setUri(ep.audioUrl)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(ep.title)
-                        .setArtist(ep.podcastTitle ?: ep.author)
-                        .build()
-                )
-                .build()
-        }
-        
-        // Find the index of the tapped episode
-        val startIndex = allEpisodes.indexOfFirst { it.id == episode.id }.coerceAtLeast(0)
-        
-        player.setMediaItems(mediaItems, startIndex, 0L)
+        val mediaItem = MediaItem.Builder()
+            .setMediaId(episode.id)
+            .setUri(episode.audioUrl)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(episode.title)
+                    .setArtist(episode.podcastTitle ?: episode.author)
+                    .build()
+            )
+            .build()
+        player.setMediaItem(mediaItem)
         player.prepare()
         player.play()
+        currentPlayingId = episode.id
     }
 
     Scaffold(
@@ -334,7 +323,7 @@ fun FavoritesScreen(
                                             FavEpisodeRow(
                                                 episode = episode,
                                                 isPlaying = isCurrentPlaying,
-                                                onClick = { playEpisode(episode, podcastState.episodes) }
+                                                onClick = { playEpisode(episode) }
                                             )
                                         }
                                     }

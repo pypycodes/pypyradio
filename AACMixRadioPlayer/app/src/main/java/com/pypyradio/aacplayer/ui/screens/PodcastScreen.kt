@@ -62,7 +62,7 @@ fun PodcastScreen(
         onDispose { player.removeListener(listener) }
     }
     
-    fun playEpisode(episode: PodcastEpisode, allEpisodes: List<PodcastEpisode>) {
+    fun playEpisode(episode: PodcastEpisode) {
         // Toggle play/pause if same episode
         if (currentPlayingId == episode.id) {
             if (player.isPlaying) {
@@ -76,26 +76,23 @@ fun PodcastScreen(
             return
         }
         
-        // Stop and load all episodes as playlist
+        // Play single episode
         player.stop()
         player.clearMediaItems()
-        
-        val mediaItems = allEpisodes.map { ep ->
-            MediaItem.Builder()
-                .setMediaId(ep.id)
-                .setUri(ep.audioUrl)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(ep.title)
-                        .setArtist(ep.podcastTitle ?: ep.author)
-                        .build()
-                )
-                .build()
-        }
-        val startIndex = allEpisodes.indexOfFirst { it.id == episode.id }
-        player.setMediaItems(mediaItems, startIndex.coerceAtLeast(0), 0L)
+        val mediaItem = MediaItem.Builder()
+            .setMediaId(episode.id)
+            .setUri(episode.audioUrl)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(episode.title)
+                    .setArtist(episode.podcastTitle ?: episode.author)
+                    .build()
+            )
+            .build()
+        player.setMediaItem(mediaItem)
         player.prepare()
         player.play()
+        currentPlayingId = episode.id
     }
     
     Scaffold(
@@ -285,7 +282,7 @@ fun PodcastScreen(
                                 EpisodeRow(
                                     episode = episode,
                                     isPlaying = isCurrentPlaying,
-                                    onClick = { playEpisode(episode, state.episodes) }
+                                    onClick = { playEpisode(episode) }
                                 )
                             }
                         }
