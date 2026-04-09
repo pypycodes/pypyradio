@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -232,96 +231,89 @@ fun PodcastScreen(
                 }
             }
             
-            // Content with Pull to Refresh
-            @OptIn(ExperimentalMaterial3Api::class)
-            PullToRefreshBox(
-                isRefreshing = state.loading,
-                onRefresh = { vm.refresh() },
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when {
-                    state.loading && state.podcasts.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+            // Content
+            when {
+                state.loading && state.podcasts.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                state.error != null -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Failed to load",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(onClick = { vm.loadTrending() }) {
+                                Text("Retry")
+                            }
                         }
                     }
-                    state.error != null -> {
+                }
+                state.showingEpisodes -> {
+                    // Episodes list
+                    if (state.episodes.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Podcasts,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Spacer(Modifier.height(12.dp))
                                 Text(
-                                    "Failed to load",
+                                    "No episodes",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    } else {
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(state.episodes, key = { it.id }) { episode ->
+                                val isCurrentPlaying = currentPlayingId == episode.id && isPlaying
+                                EpisodeRow(
+                                    episode = episode,
+                                    isPlaying = isCurrentPlaying,
+                                    onClick = { playEpisode(episode, state.episodes) }
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    // Podcasts list
+                    if (state.podcasts.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Podcasts,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
                                 Spacer(Modifier.height(12.dp))
-                                TextButton(onClick = { vm.loadTrending() }) {
-                                    Text("Retry")
-                                }
+                                Text(
+                                    "No podcasts found",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
-                    }
-                    state.showingEpisodes -> {
-                        // Episodes list
-                        if (state.episodes.isEmpty()) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.Podcasts,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(
-                                        "No episodes",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyColumn(Modifier.fillMaxSize()) {
-                                items(state.episodes, key = { it.id }) { episode ->
-                                    val isCurrentPlaying = currentPlayingId == episode.id && isPlaying
-                                    EpisodeRow(
-                                        episode = episode,
-                                        isPlaying = isCurrentPlaying,
-                                        onClick = { playEpisode(episode, state.episodes) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    else -> {
-                        // Podcasts list
-                        if (state.podcasts.isEmpty()) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.Podcasts,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(
-                                        "No podcasts found",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyColumn(Modifier.fillMaxSize()) {
-                                items(state.podcasts, key = { it.id }) { podcast ->
-                                    val isFav = favoriteIds.contains(podcast.id)
-                                    PodcastRow(
-                                        podcast = podcast,
-                                        isFavorite = isFav,
-                                        onFavoriteClick = { vm.toggleFavorite(podcast) },
-                                        onClick = { vm.loadEpisodes(podcast) }
-                                    )
-                                }
+                    } else {
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(state.podcasts, key = { it.id }) { podcast ->
+                                val isFav = favoriteIds.contains(podcast.id)
+                                PodcastRow(
+                                    podcast = podcast,
+                                    isFavorite = isFav,
+                                    onFavoriteClick = { vm.toggleFavorite(podcast) },
+                                    onClick = { vm.loadEpisodes(podcast) }
+                                )
                             }
                         }
                     }
