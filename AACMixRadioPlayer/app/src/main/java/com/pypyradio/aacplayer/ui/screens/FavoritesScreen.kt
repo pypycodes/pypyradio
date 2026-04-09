@@ -41,7 +41,6 @@ fun FavoritesScreen(
     vm: StationsViewModel,
     podcastVm: PodcastViewModel = viewModel(),
     player: Player,
-    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val radioFavs by vm.favorites.collectAsState()

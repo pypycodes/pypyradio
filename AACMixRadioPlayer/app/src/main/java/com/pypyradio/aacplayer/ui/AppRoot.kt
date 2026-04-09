@@ -183,19 +183,6 @@ fun AppRoot() {
                         SimpleNowPlayingBar(
                             player = player,
                             isFavorite = isCurrentFavorite,
-                            onToggleFavorite = {
-                                currentMediaId?.let { mediaId ->
-                                    val station = favorites.find { it.stationuuid == mediaId }
-                                    if (station != null) {
-                                        vm.toggleFavorite(station)
-                                    } else {
-                                        val browseState = vm.browse.value
-                                        browseState.stations.find { it.stationuuid == mediaId }?.let { st ->
-                                            vm.toggleFavorite(st)
-                                        }
-                                    }
-                                }
-                            },
                             onStationFailed = { failedMediaId ->
                                 vm.markStationFailed(failedMediaId, "Playback failed")
                             },

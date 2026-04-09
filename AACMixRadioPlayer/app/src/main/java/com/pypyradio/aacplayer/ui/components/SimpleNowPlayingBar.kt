@@ -32,7 +32,6 @@ import coil.compose.AsyncImage
 fun SimpleNowPlayingBar(
     player: Player,
     isFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {},
     onStationFailed: (String) -> Unit = {},
     sleepTimerMinutes: Int? = null,
     onSleepTimerClick: () -> Unit = {}
