@@ -49,6 +49,8 @@ jobs:
     needs: check-version-change
     if: needs.check-version-change.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,19 +77,9 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Build Release APK
-        working-directory: AACMixRadioPlayer
-        run: ./gradlew assembleRelease
-
       - name: Build Release AAB
         working-directory: AACMixRadioPlayer
         run: ./gradlew bundleRelease
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: AACMixRadioPlayer/app/build/outputs/apk/release/*.apk
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
@@ -106,10 +98,8 @@ jobs:
             **Version Code:** ${{ needs.check-version-change.outputs.version_code }}
             
             ### Downloads
-            - **APK** - Direct install on Android devices
             - **AAB** - For Google Play Store upload
           files: |
-            AACMixRadioPlayer/app/build/outputs/apk/release/*.apk
             AACMixRadioPlayer/app/build/outputs/bundle/release/*.aab
           draft: false
           prerelease: false
