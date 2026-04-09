@@ -260,7 +260,7 @@ fun AppRoot(vm: StationsViewModel = viewModel()) {
                 )
             }
             
-            if (showFullScreenPlayer && player != null) {
+            if (showFullScreenPlayer) {
                 ModalBottomSheet(
                     onDismissRequest = { showFullScreenPlayer = false },
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -276,8 +276,7 @@ fun AppRoot(vm: StationsViewModel = viewModel()) {
                             }
                         },
                         sleepTimerMinutes = sleepTimerState.remainingMinutes ?: 0,
-                        onSleepTimerClick = sleepTimerState.onShowDialog,
-                        onDismiss = { showFullScreenPlayer = false }
+                        onSleepTimerClick = sleepTimerState.onShowDialog
                     )
                 }
             }

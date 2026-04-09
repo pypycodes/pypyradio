@@ -27,8 +27,7 @@ fun FullScreenPlayer(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     sleepTimerMinutes: Int,
-    onSleepTimerClick: () -> Unit,
-    onDismiss: () -> Unit
+    onSleepTimerClick: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var artist by remember { mutableStateOf("") }
