@@ -31,11 +31,7 @@ import coil.compose.AsyncImage
 @Composable
 fun SimpleNowPlayingBar(
     player: Player,
-    isFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {},
     onStationFailed: (String) -> Unit = {},
-    sleepTimerMinutes: Int? = null,
-    onSleepTimerClick: () -> Unit = {},
     onClick: () -> Unit = {}
 ) {
     var title by remember { mutableStateOf<String?>(null) }
