@@ -128,7 +128,13 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     fun loadTop() = viewModelScope.launch {
         _browse.value = _browse.value.copy(loading = true, error = null)
         runCatching { repo.topVotedAac(500) }
-            .onSuccess { updateStations(it) }
+            .onSuccess { stations ->
+                // Sort with India (IN) stations first, then keep original order
+                val sorted = stations.sortedWith(
+                    compareByDescending<Station> { it.countryCode == "IN" }
+                )
+                updateStations(sorted)
+            }
             .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
     }
 

@@ -124,8 +124,8 @@ fun BrowseScreen(
             .build()
     }
     
-    // Play a single station directly
-    fun playStation(st: Station) {
+    // Play station with playlist for next/prev support
+    fun playStation(st: Station, stationList: List<Station>) {
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
         lastPlayTime = now
@@ -150,11 +150,16 @@ fun BrowseScreen(
             return
         }
         
-        // Play new station
+        // Build playlist from all stations for next/prev support
         try {
             player.stop()
             player.clearMediaItems()
-            player.setMediaItem(createMediaItem(st))
+            
+            val mediaItems = stationList.map { createMediaItem(it) }
+            val startIndex = stationList.indexOfFirst { it.stationuuid == st.stationuuid }
+                .coerceAtLeast(0)
+            
+            player.setMediaItems(mediaItems, startIndex, 0L)
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
@@ -224,7 +229,10 @@ fun BrowseScreen(
                         )
                     )
                     if (state.query.isNotEmpty()) {
-                        IconButton(onClick = { vm.setQuery("") }) {
+                        IconButton(onClick = { 
+                            vm.setQuery("")
+                            vm.loadTop()  // Reload top stations when cleared
+                        }) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
                         }
                         FilledTonalIconButton(
@@ -286,7 +294,7 @@ fun BrowseScreen(
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
-                                onRowClick = { playStation(st) },
+                                onRowClick = { playStation(st, displayStations) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
                         }
