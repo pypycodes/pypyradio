@@ -5,13 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -220,13 +220,19 @@ fun BrowseScreen(
                 } catch (e2: Exception) {
                     vm.markStationFailed(st.stationuuid, "Playback error")
                     scope.launch {
-                        snackbarHostState.showSnackbar("Error playing: ${st.name}")
+                        snackbarHostState.showSnackbar(
+                            "Station unavailable - try another one",
+                            duration = SnackbarDuration.Short
+                        )
                     }
                 }
             }
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar("No stream URL for: ${st.name}")
+                snackbarHostState.showSnackbar(
+                    "Station offline - free stations may change",
+                    duration = SnackbarDuration.Short
+                )
             }
         }
     }
@@ -248,61 +254,140 @@ fun BrowseScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Radio,
-                            contentDescription = "pypyradio",
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.primary
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp
+            ) {
+                Column {
+                    TopAppBar(
+                        title = { 
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { onGoAbout() }
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Icon(
+                                        Icons.Default.Radio,
+                                        contentDescription = "About pypyradio",
+                                        modifier = Modifier.size(36.dp).padding(6.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        "pypyradio",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Free Internet Radio",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            // Shuffle button
+                            FilledTonalIconButton(
+                                onClick = { playRandom() },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Shuffle, 
+                                    contentDescription = "Play Random",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            // Favorites button
+                            FilledTonalIconButton(
+                                onClick = onGoFavorites,
+                                modifier = Modifier.size(40.dp),
+                                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                    containerColor = Color(0xFFFFE0E0)
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.Favorite, 
+                                    contentDescription = "Favorites", 
+                                    tint = Color(0xFFE91E63),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            // Podcast button
+                            FilledTonalIconButton(
+                                onClick = onGoPodcasts,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Podcasts, 
+                                    contentDescription = "Podcasts",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
                         )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { playRandom() }) {
-                        Icon(Icons.Default.Shuffle, contentDescription = "Play Random")
-                    }
-                    IconButton(onClick = onGoFavorites) {
-                        Icon(Icons.Default.Favorite, contentDescription = "Favorites", tint = Color.Red)
-                    }
-                    
-                    // Podcast button - stands out with filled style
-                    FilledTonalIconButton(
-                        onClick = onGoPodcasts,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Podcasts, 
-                            contentDescription = "Podcasts",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    
-                    IconButton(onClick = onGoAbout) {
-                        Icon(Icons.Default.Info, contentDescription = "About")
-                    }
+                    )
                 }
-            )
+            }
         },
     ) { padding ->
         Column(modifier.padding(padding).fillMaxSize()) {
 
-            // Search bar
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Search bar - modern design
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-                OutlinedTextField(
-                    modifier = Modifier.weight(1f),
-                    value = state.query,
-                    onValueChange = vm::setQuery,
-                    label = { Text("Search station name") },
-                    singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = { vm.search() }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = 12.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextField(
+                        modifier = Modifier.weight(1f),
+                        value = state.query,
+                        onValueChange = vm::setQuery,
+                        placeholder = { Text("Search stations...") },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        )
+                    )
+                    if (state.query.isNotEmpty()) {
+                        FilledTonalIconButton(
+                            onClick = { vm.search() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
                 }
             }
             
@@ -494,28 +579,38 @@ fun BrowseScreen(
             
             // Station count and pagination info
             if (!state.loading && state.error == null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    val countText = when (state.filter) {
-                        StationFilter.ALL -> "${filteredStations.size} stations"
-                        StationFilter.HIDE_FAILED -> "${filteredStations.size} stations (hiding ${state.failedStationIds.size} failed)"
-                        StationFilter.WORKING_ONLY -> "${filteredStations.size} working stations"
-                    }
-                    Text(
-                        countText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (totalPages > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val countText = when (state.filter) {
+                            StationFilter.ALL -> "${filteredStations.size} stations"
+                            StationFilter.HIDE_FAILED -> "${filteredStations.size} stations (hiding ${state.failedStationIds.size} failed)"
+                            StationFilter.WORKING_ONLY -> "${filteredStations.size} working stations"
+                        }
                         Text(
-                            "Page ${currentPage + 1} of $totalPages",
+                            countText,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (totalPages > 1) {
+                            Text(
+                                "Page ${currentPage + 1} of $totalPages",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
+                    // Subtle disclaimer
+                    Text(
+                        "Free stations may occasionally be unavailable",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
                 
                 // Pagination tabs (show when more than 1 page)
@@ -576,7 +671,6 @@ fun BrowseScreen(
                                 },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
-                            HorizontalDivider()
                         }
                     }
                 }
@@ -596,76 +690,165 @@ private fun StationRow(
     onRowClick: () -> Unit, 
     onFavorite: () -> Unit
 ) {
-    Row(
+    val isActive = isPlaying || isBuffering
+    
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onRowClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.size(40.dp)) {
-            AsyncImage(model = st.favicon, contentDescription = null, modifier = Modifier.size(40.dp))
-            when {
-                hasFailed -> Icon(
-                    Icons.Default.Warning,
-                    contentDescription = "Playback failed previously",
-                    tint = Color(0xFFFFB300),
-                    modifier = Modifier.size(20.dp).align(Alignment.BottomEnd)
-                )
-                isWorking -> Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .align(Alignment.BottomEnd)
-                        .background(Color(0xFF4CAF50), shape = CircleShape)
-                )
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                hasFailed -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                else -> MaterialTheme.colorScheme.surface
             }
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isActive) 4.dp else 1.dp
+        ),
+        onClick = onRowClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Station artwork with status indicator
+            Box(modifier = Modifier.size(52.dp)) {
+                Surface(
+                    modifier = Modifier.size(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    AsyncImage(
+                        model = st.favicon, 
+                        contentDescription = null, 
+                        modifier = Modifier.fillMaxSize().padding(4.dp)
+                    )
+                }
+                // Status badge
+                when {
+                    isBuffering -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .align(Alignment.BottomEnd),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    isPlaying -> {
+                        Surface(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.padding(2.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    hasFailed -> {
+                        Surface(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = Color(0xFFFFB300)
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Failed",
+                                modifier = Modifier.padding(2.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    isWorking -> {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .align(Alignment.BottomEnd)
+                                .background(Color(0xFF4CAF50), shape = CircleShape)
+                        )
+                    }
+                }
+            }
+            
+            Spacer(Modifier.width(12.dp))
+            
+            // Station info
+            Column(Modifier.weight(1f)) {
                 Text(
                     st.name, 
-                    style = MaterialTheme.typography.titleMedium, 
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1, 
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Country badge
+                    st.countryCode?.let { country ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                country,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                    // Codec & bitrate
+                    val techInfo = listOfNotNull(
+                        st.codec?.uppercase(),
+                        st.bitrate?.let { "${it}k" }
+                    ).joinToString(" • ")
+                    if (techInfo.isNotBlank()) {
+                        Text(
+                            techInfo, 
+                            style = MaterialTheme.typography.labelSmall, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                // Status text for active station
                 if (isBuffering) {
-                    Spacer(Modifier.width(8.dp))
                     Text(
-                        "Loading...",
+                        "Connecting...",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary
                     )
                 } else if (isPlaying) {
-                    Spacer(Modifier.width(8.dp))
                     Text(
-                        "Playing...",
+                        "Now Playing",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            val meta = listOfNotNull(st.countryCode, st.codec, st.bitrate?.let { "${it}kbps" }).joinToString(" • ")
-            Text(meta, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        IconButton(onClick = onFavorite) { 
-            Icon(
-                if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, 
-                contentDescription = "Favorite",
-                tint = if (isFavorite) Color.Red else LocalContentColor.current
-            ) 
-        }
-        // Show pause button when buffering or playing (so user can stop it)
-        Icon(
-            if (isPlaying || isBuffering) Icons.Default.Pause else Icons.Default.PlayArrow, 
-            contentDescription = if (isPlaying || isBuffering) "Pause" else "Play",
-            tint = when {
-                hasFailed -> Color(0xFFFFB300)
-                isBuffering -> MaterialTheme.colorScheme.tertiary
-                isPlaying -> MaterialTheme.colorScheme.primary
-                else -> LocalContentColor.current
+            
+            // Favorite button
+            IconButton(onClick = onFavorite) { 
+                Icon(
+                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, 
+                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
+                ) 
             }
-        )
+        }
     }
 }
