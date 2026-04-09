@@ -128,11 +128,16 @@ fun FavoritesScreen(
             try {
                 player.stop()
                 player.clearMediaItems()
-                val tappedMediaItem = createStationMediaItem(st)
-                val otherStations = radioFavs.filter { it.urlResolved.isNotBlank() && it.stationuuid != st.stationuuid }
-                val allMediaItems = mutableListOf(tappedMediaItem)
-                allMediaItems.addAll(otherStations.map { createStationMediaItem(it) })
-                player.setMediaItems(allMediaItems, 0, 0L)
+                
+                // Build playlist from all valid stations in original order
+                val validStations = radioFavs.filter { it.urlResolved.isNotBlank() }
+                val mediaItems = validStations.map { createStationMediaItem(it) }
+                
+                // Find the index of the tapped station
+                val startIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
+                    .coerceAtLeast(0)
+                
+                player.setMediaItems(mediaItems, startIndex, 0L)
                 player.prepare()
                 player.play()
             } catch (e: Exception) {
