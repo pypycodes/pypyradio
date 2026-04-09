@@ -93,6 +93,26 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
             .map { it.toDomain() }
             .deduplicateByHighestBitrate()
     }
+    
+    suspend fun searchByCountryCode(countryCode: String, limit: Int = 300): List<Station> {
+        val api = RadioBrowserClient.api()
+        val result = api.searchStations(
+            name = null,
+            tag = null,
+            country = null,
+            countryCode = countryCode,
+            language = null,
+            codec = null,
+            hideBroken = true,
+            limit = limit,
+            order = "votes",
+            reverse = true
+        )
+        return result
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            .map { it.toDomain() }
+            .deduplicateByHighestBitrate()
+    }
 
     suspend fun searchNewsByLanguage(language: String?, limit: Int = 200): List<Station> {
         val api = RadioBrowserClient.api()

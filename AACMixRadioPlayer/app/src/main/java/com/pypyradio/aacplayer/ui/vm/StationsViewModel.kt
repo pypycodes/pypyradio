@@ -187,6 +187,13 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
             .onSuccess { updateStations(it) }
             .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
     }
+    
+    fun searchByCountry(countryCode: String) = viewModelScope.launch {
+        _browse.value = _browse.value.copy(loading = true, error = null)
+        runCatching { repo.searchByCountryCode(countryCode, 300) }
+            .onSuccess { updateStations(it) }
+            .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
+    }
 
     fun toggleFavorite(station: Station) = viewModelScope.launch {
         repo.toggleFavorite(station)

@@ -44,10 +44,17 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier
 ) {
     val radioFavs by vm.favorites.collectAsState()
+    val browseState by vm.browse.collectAsState()
+    val failedStationIds = browseState.failedStationIds
     val podcastFavs by podcastVm.favorites.collectAsState()
     val podcastState by podcastVm.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    
+    // Filter out failed stations from favorites
+    val validRadioFavs = remember(radioFavs, failedStationIds) {
+        radioFavs.filter { !failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank() }
+    }
     
     var selectedTab by remember { mutableStateOf(FavoritesTab.RADIO) }
     var currentPlayingId by remember { mutableStateOf<String?>(null) }
@@ -138,12 +145,11 @@ fun FavoritesScreen(
                 player.stop()
                 player.clearMediaItems()
                 
-                // Build playlist from all valid stations in original order
-                val validStations = radioFavs.filter { it.urlResolved.isNotBlank() }
-                val mediaItems = validStations.map { createStationMediaItem(it) }
+                // Build playlist from valid stations (excluding failed ones)
+                val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
                 
                 // Find the index of the tapped station
-                val startIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
+                val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
                     .coerceAtLeast(0)
                 
                 player.setMediaItems(mediaItems, startIndex, 0L)
@@ -251,7 +257,7 @@ fun FavoritesScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Radio, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Radio (${radioFavs.size})")
+                            Text("Radio (${validRadioFavs.size})")
                         }
                     }
                 )
@@ -271,7 +277,7 @@ fun FavoritesScreen(
             // Content based on selected tab
             when (selectedTab) {
                 FavoritesTab.RADIO -> {
-                    if (radioFavs.isEmpty()) {
+                    if (validRadioFavs.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
@@ -290,7 +296,7 @@ fun FavoritesScreen(
                         }
                     } else {
                         LazyColumn(Modifier.fillMaxSize()) {
-                            items(radioFavs, key = { it.stationuuid }) { st ->
+                            items(validRadioFavs, key = { it.stationuuid }) { st ->
                                 val isCurrentPlaying = currentPlayingId == st.stationuuid && isPlaying
                                 FavStationRow(
                                     st = st,
