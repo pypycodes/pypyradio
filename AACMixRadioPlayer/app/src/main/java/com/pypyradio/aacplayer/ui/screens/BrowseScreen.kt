@@ -101,6 +101,18 @@ fun BrowseScreen(
                     currentPlayingId?.let { vm.markStationWorking(it) }
                 }
             }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                currentPlayingId?.let { failedId ->
+                    vm.markStationFailed(failedId, "Playback failed")
+                    // The service might be retrying, but if we get an error bubble up, we can also try to skip
+                    if (p.hasNextMediaItem()) {
+                        p.seekToNextMediaItem()
+                        p.prepare()
+                        p.play()
+                    }
+                }
+            }
         }
         player.addListener(listener)
         currentPlayingId = player.currentMediaItem?.mediaId
@@ -315,10 +327,10 @@ fun BrowseScreen(
                 }
             }
             
-            // Filter out failed stations for display
-            val displayStations = remember(state.stations, state.failedStationIds) {
+            // Only filter out blank URLs, keep failed stations so we can show warning mark
+            val displayStations = remember(state.stations) {
                 state.stations.filter { 
-                    !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
+                    it.urlResolved.isNotBlank()
                 }
             }
             
@@ -362,6 +374,7 @@ fun BrowseScreen(
                 else -> {
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(displayStations, key = { it.stationuuid }) { st ->
+                            val isFailed = state.failedStationIds.contains(st.stationuuid)
                             val isFavorite = favoriteIds.contains(st.stationuuid)
                             val isCurrentStation = currentPlayingId == st.stationuuid
                             val isCurrentlyPlaying = isCurrentStation && isPlaying
@@ -369,6 +382,7 @@ fun BrowseScreen(
                             
                             StationRow(
                                 st = st,
+                                isFailed = isFailed,
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
@@ -386,6 +400,7 @@ fun BrowseScreen(
 @Composable
 private fun StationRow(
     st: Station, 
+    isFailed: Boolean = false,
     isFavorite: Boolean,
     isPlaying: Boolean,
     isBuffering: Boolean = false,
@@ -401,6 +416,8 @@ private fun StationRow(
         colors = CardDefaults.cardColors(
             containerColor = if (isActive) 
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
+            else if (isFailed)
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
             else 
                 MaterialTheme.colorScheme.surface
         ),
@@ -442,6 +459,19 @@ private fun StationRow(
                             contentDescription = null,
                             modifier = Modifier.padding(2.dp),
                             tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                } else if (isFailed) {
+                    Surface(
+                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
+                        shape = CircleShape,
+                        color = Color.White
+                    ) {
+                        Icon(
+                            androidx.compose.material.icons.filled.Warning,
+                            contentDescription = "Failed",
+                            modifier = Modifier.padding(1.dp),
+                            tint = Color(0xFFFFB300) // Yellow/Amber warning mark
                         )
                     }
                 }
