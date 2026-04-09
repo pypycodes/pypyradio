@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
@@ -16,21 +18,28 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
+import coil.compose.AsyncImage
 
 @Composable
 fun SimpleNowPlayingBar(
     player: Player,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
-    onStationFailed: (String) -> Unit = {}
+    onStationFailed: (String) -> Unit = {},
+    sleepTimerMinutes: Int? = null,
+    onSleepTimerClick: () -> Unit = {}
 ) {
     var title by remember { mutableStateOf<String?>(null) }
     var mediaId by remember { mutableStateOf<String?>(null) }
+    var artworkUrl by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var isStopped by remember { mutableStateOf(false) }
@@ -47,6 +56,7 @@ fun SimpleNowPlayingBar(
                 title = p.currentMediaItem?.mediaMetadata?.title?.toString()
                     ?: p.currentMediaItem?.mediaId
                 mediaId = p.currentMediaItem?.mediaId
+                artworkUrl = p.currentMediaItem?.mediaMetadata?.artworkUri?.toString()
                 isPlaying = p.isPlaying
                 isBuffering = p.playbackState == Player.STATE_BUFFERING
                 isStopped = p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED
@@ -95,6 +105,7 @@ fun SimpleNowPlayingBar(
         title = player.currentMediaItem?.mediaMetadata?.title?.toString()
             ?: player.currentMediaItem?.mediaId
         mediaId = player.currentMediaItem?.mediaId
+        artworkUrl = player.currentMediaItem?.mediaMetadata?.artworkUri?.toString()
         isPlaying = player.isPlaying
         isBuffering = player.playbackState == Player.STATE_BUFFERING
         isStopped = player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
@@ -133,23 +144,55 @@ fun SimpleNowPlayingBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Favorite button with animation
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
+                // Artwork thumbnail with favorite overlay
+                Box(modifier = Modifier.size(48.dp)) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        if (artworkUrl != null) {
+                            AsyncImage(
+                                model = artworkUrl,
+                                contentDescription = "Now playing artwork",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Radio,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                    // Favorite indicator
+                    if (isFavorite) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .size(18.dp),
+                            shape = CircleShape,
+                            color = Color.White
+                        ) {
+                            Icon(
+                                Icons.Default.Favorite,
+                                contentDescription = "Favorite",
+                                tint = Color(0xFFE91E63),
+                                modifier = Modifier.padding(2.dp)
+                            )
+                        }
+                    }
                 }
                 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
                 
                 // Title and status
                 Column(
@@ -262,6 +305,33 @@ fun SimpleNowPlayingBar(
                             contentDescription = "Next",
                             modifier = Modifier.size(20.dp)
                         )
+                    }
+
+                    // Sleep Timer
+                    FilledTonalIconButton(
+                        onClick = onSleepTimerClick,
+                        modifier = Modifier.size(36.dp),
+                        colors = if (sleepTimerMinutes != null) {
+                            IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            )
+                        } else {
+                            IconButtonDefaults.filledTonalIconButtonColors()
+                        }
+                    ) {
+                        if (sleepTimerMinutes != null) {
+                            Text(
+                                "${sleepTimerMinutes}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Bedtime,
+                                contentDescription = "Sleep Timer",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
 
                     // Stop

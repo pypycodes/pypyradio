@@ -132,6 +132,15 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
     }
 
+    fun refresh() {
+        // Reload current data
+        if (_browse.value.query.isNotEmpty()) {
+            search()
+        } else {
+            loadTop()
+        }
+    }
+
     fun search() = viewModelScope.launch {
         val q = _browse.value.query.trim()
         if (q.isEmpty()) {

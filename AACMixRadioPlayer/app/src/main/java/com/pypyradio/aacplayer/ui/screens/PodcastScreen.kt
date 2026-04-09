@@ -1,6 +1,5 @@
 package com.pypyradio.aacplayer.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,12 +15,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,21 +27,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
-import com.pypyradio.aacplayer.playback.RadioController
 import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PodcastScreen(
     vm: PodcastViewModel = viewModel(),
     player: Player,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by vm.state.collectAsState()
@@ -100,35 +95,53 @@ fun PodcastScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        when {
-                            state.showingEpisodes && state.selectedPodcast != null -> state.selectedPodcast!!.title
-                            state.showingFavorites -> "Favorite Podcasts"
-                            else -> "Podcasts"
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp
+            ) {
+                TopAppBar(
+                    title = { 
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Back button - only show when viewing episodes
+                            if (state.showingEpisodes) {
+                                IconButton(onClick = { vm.backToPodcasts() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                            }
+                            
+                            // Logo and title
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer
+                            ) {
+                                Icon(
+                                    Icons.Default.Podcasts,
+                                    contentDescription = "Podcasts",
+                                    modifier = Modifier.size(36.dp).padding(6.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                if (state.showingEpisodes && state.selectedPodcast != null) 
+                                    state.selectedPodcast!!.title 
+                                else 
+                                    "Podcasts",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                    ) 
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        when {
-                            state.showingEpisodes -> vm.backToPodcasts()
-                            state.showingFavorites -> vm.backToPodcasts()
-                            else -> onBack()
-                        }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (!state.showingEpisodes && !state.showingFavorites) {
-                        IconButton(onClick = { vm.showFavorites() }) {
-                            Icon(Icons.Default.Favorite, contentDescription = "Favorites", tint = Color.Red)
-                        }
-                    }
-                }
-            )
+                    },
+                    navigationIcon = { },
+                    actions = { },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -136,24 +149,51 @@ fun PodcastScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Search bar (only show when not viewing episodes or favorites)
-            if (!state.showingEpisodes && !state.showingFavorites) {
-                Row(
+            // Search bar - modern design (only show when not viewing episodes)
+            if (!state.showingEpisodes) {
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = state.query,
-                        onValueChange = vm::setQuery,
-                        label = { Text("Search podcasts") },
-                        singleLine = true
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = { vm.search() }) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 12.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextField(
+                            modifier = Modifier.weight(1f),
+                            value = state.query,
+                            onValueChange = vm::setQuery,
+                            placeholder = { Text("Search podcasts...") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
+                        )
+                        if (state.query.isNotEmpty()) {
+                            FilledTonalIconButton(
+                                onClick = { vm.search() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(4.dp))
                     }
                 }
                 
@@ -192,105 +232,96 @@ fun PodcastScreen(
                 }
             }
             
-            // Content
-            when {
-                state.loading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                state.error != null -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Error: ${state.error}")
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = { vm.loadTrending() }) {
-                                Text("Retry")
-                            }
-                        }
-                    }
-                }
-                state.showingEpisodes -> {
-                    // Episodes list
-                    if (state.episodes.isEmpty()) {
+            // Content with Pull to Refresh
+            @OptIn(ExperimentalMaterial3Api::class)
+            PullToRefreshBox(
+                isRefreshing = state.loading,
+                onRefresh = { vm.refresh() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when {
+                    state.loading && state.podcasts.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No episodes found")
-                        }
-                    } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            items(state.episodes, key = { it.id }) { episode ->
-                                val isCurrentPlaying = currentPlayingId == episode.id && isPlaying
-                                EpisodeRow(
-                                    episode = episode,
-                                    isPlaying = isCurrentPlaying,
-                                    onClick = { playEpisode(episode, state.episodes) }
-                                )
-                                HorizontalDivider()
-                            }
+                            CircularProgressIndicator()
                         }
                     }
-                }
-                state.showingFavorites -> {
-                    // Favorites list
-                    if (favorites.isEmpty()) {
+                    state.error != null -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.FavoriteBorder,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text("No favorite podcasts yet")
-                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Tap the heart icon on a podcast to add it",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    "Failed to load",
+                                    style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            }
-                        }
-                    } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            items(favorites, key = { it.id }) { podcast ->
-                                PodcastRow(
-                                    podcast = podcast,
-                                    isFavorite = true,
-                                    onFavoriteClick = { vm.toggleFavorite(podcast) },
-                                    onClick = { vm.loadFavoriteEpisodes(podcast) }
-                                )
-                                HorizontalDivider()
+                                Spacer(Modifier.height(12.dp))
+                                TextButton(onClick = { vm.loadTrending() }) {
+                                    Text("Retry")
+                                }
                             }
                         }
                     }
-                }
-                else -> {
-                    // Podcasts list
-                    if (state.podcasts.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.Podcasts,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text("No podcasts found")
+                    state.showingEpisodes -> {
+                        // Episodes list
+                        if (state.episodes.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.Podcasts,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "No episodes",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(Modifier.fillMaxSize()) {
+                                items(state.episodes, key = { it.id }) { episode ->
+                                    val isCurrentPlaying = currentPlayingId == episode.id && isPlaying
+                                    EpisodeRow(
+                                        episode = episode,
+                                        isPlaying = isCurrentPlaying,
+                                        onClick = { playEpisode(episode, state.episodes) }
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            items(state.podcasts, key = { it.id }) { podcast ->
-                                val isFav = favoriteIds.contains(podcast.id)
-                                PodcastRow(
-                                    podcast = podcast,
-                                    isFavorite = isFav,
-                                    onFavoriteClick = { vm.toggleFavorite(podcast) },
-                                    onClick = { vm.loadEpisodes(podcast) }
-                                )
-                                HorizontalDivider()
+                    }
+                    else -> {
+                        // Podcasts list
+                        if (state.podcasts.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.Podcasts,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "No podcasts found",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(Modifier.fillMaxSize()) {
+                                items(state.podcasts, key = { it.id }) { podcast ->
+                                    val isFav = favoriteIds.contains(podcast.id)
+                                    PodcastRow(
+                                        podcast = podcast,
+                                        isFavorite = isFav,
+                                        onFavoriteClick = { vm.toggleFavorite(podcast) },
+                                        onClick = { vm.loadEpisodes(podcast) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -307,68 +338,103 @@ private fun PodcastRow(
     onFavoriteClick: () -> Unit = {},
     onClick: () -> Unit
 ) {
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        onClick = onClick
     ) {
-        AsyncImage(
-            model = podcast.imageUrl,
-            contentDescription = null,
+        Row(
             modifier = Modifier
-                .size(60.dp)
-                .clip(RoundedCornerShape(8.dp))
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                podcast.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            podcast.author?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Podcast artwork
+            Surface(
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                AsyncImage(
+                    model = podcast.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                podcast.genre?.let {
+            Spacer(Modifier.width(12.dp))
+            
+            // Podcast info
+            Column(Modifier.weight(1f)) {
+                Text(
+                    podcast.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                podcast.author?.let {
                     Text(
                         it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.width(8.dp))
                 }
-                podcast.episodeCount?.let {
-                    Text(
-                        "$it episodes",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    podcast.genre?.let {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    podcast.episodeCount?.let {
+                        Text(
+                            "$it episodes",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
+            
+            // Favorite button
+            FilledTonalIconButton(
+                onClick = onFavoriteClick,
+                modifier = Modifier.size(36.dp),
+                colors = if (isFavorite) {
+                    IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color(0xFFFFE0E0)
+                    )
+                } else {
+                    IconButtonDefaults.filledTonalIconButtonColors()
+                }
+            ) {
+                Icon(
+                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
-        IconButton(onClick = onFavoriteClick) {
-            Icon(
-                if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                tint = if (isFavorite) Color.Red else LocalContentColor.current
-            )
-        }
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = "View episodes",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -378,72 +444,122 @@ private fun EpisodeRow(
     isPlaying: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPlaying) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isPlaying) 4.dp else 1.dp
+        ),
+        onClick = onClick
     ) {
-        AsyncImage(
-            model = episode.imageUrl,
-            contentDescription = null,
+        Row(
             modifier = Modifier
-                .size(50.dp)
-                .clip(RoundedCornerShape(6.dp))
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Episode artwork
+            Surface(
+                modifier = Modifier.size(56.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                AsyncImage(
+                    model = episode.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            
+            // Episode info
+            Column(Modifier.weight(1f)) {
                 Text(
                     episode.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (isPlaying) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Playing...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            episode.podcastTitle?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(2.dp))
+                episode.podcastTitle?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    episode.publishedDate?.let {
+                        Text(
+                            it.take(10),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    episode.durationMs?.let { ms ->
+                        val minutes = ms / 60000
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                "${minutes} min",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (isPlaying) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                "Playing",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                episode.publishedDate?.let {
-                    Text(
-                        it.take(10), // Just the date part
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            
+            // Play button
+            FilledTonalIconButton(
+                onClick = onClick,
+                modifier = Modifier.size(40.dp),
+                colors = if (isPlaying) {
+                    IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.width(8.dp))
+                } else {
+                    IconButtonDefaults.filledTonalIconButtonColors()
                 }
-                episode.durationMs?.let { ms ->
-                    val minutes = ms / 60000
-                    Text(
-                        "${minutes}min",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            ) {
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
-        Icon(
-            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-            contentDescription = if (isPlaying) "Pause" else "Play",
-            tint = if (isPlaying) MaterialTheme.colorScheme.primary else LocalContentColor.current
-        )
     }
 }

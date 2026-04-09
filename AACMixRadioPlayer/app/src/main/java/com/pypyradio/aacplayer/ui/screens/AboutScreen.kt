@@ -1,13 +1,15 @@
 package com.pypyradio.aacplayer.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.*
+import androidx.compose.ui.res.painterResource
+import com.pypyradio.aacplayer.R
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
@@ -32,6 +34,8 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             )
         }
     ) { padding ->
+        val uriHandler = LocalUriHandler.current
+        
         Column(
             modifier = modifier
                 .padding(padding)
@@ -40,260 +44,72 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Logo
-            Surface(
-                modifier = Modifier.size(100.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Radio,
-                        contentDescription = "pypyradio logo",
-                        modifier = Modifier.size(60.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+            Spacer(Modifier.height(24.dp))
             
-            Spacer(Modifier.height(16.dp))
+            // App Logo - using actual app icon
+            Image(
+                painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                contentDescription = "pypyradio",
+                modifier = Modifier.size(120.dp)
+            )
             
             Text(
                 "pypyradio",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
             
             Text(
-                "Version ${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodyMedium,
+                "v${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            Spacer(Modifier.height(48.dp))
+            
+            // Minimal info rows
+            InfoRow("Free radio & podcasts")
+            InfoRow("No ads, no tracking")
+            InfoRow("Open source")
             
             Spacer(Modifier.height(32.dp))
             
-            // Description
-            Card(
-                modifier = Modifier.fillMaxWidth()
+            // Links
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "About This App",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "pypyradio is a free, open-source internet radio streaming app. " +
-                        "Browse thousands of radio stations from around the world, " +
-                        "save your favorites, and enjoy music on the go.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                TextButton(
+                    onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio") }
+                ) {
+                    Text("GitHub")
+                }
+                TextButton(
+                    onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio/blob/main/privacypolicy.html") }
+                ) {
+                    Text("Privacy")
                 }
             }
             
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.weight(1f))
             
-            // Features
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Features",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FeatureItem("🎵 Stream thousands of radio stations")
-                    FeatureItem("❤️ Save your favorite stations")
-                    FeatureItem("🔀 Random play mode")
-                    FeatureItem("🌙 Dark mode support")
-                    FeatureItem("🚗 Android Auto compatible")
-                    FeatureItem("🔒 No ads, no tracking")
-                    FeatureItem("👨‍👩‍👧‍👦 Family friendly")
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Disclaimer about free radio stations
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "⚠️ Disclaimer",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "pypyradio streams free internet radio stations from around the world. " +
-                        "These stations are operated by independent broadcasters and may occasionally " +
-                        "be unavailable, change URLs, or go offline permanently.\n\n" +
-                        "We do not control the content or availability of these stations. " +
-                        "If a station doesn't work, try another one or check back later.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Credits & Inspiration
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Credits & Inspiration",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "This app was inspired by the love for radio and the desire to " +
-                        "create a simple, clean radio streaming experience.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    CreditItem("Radio Browser API", "Community-driven radio station database")
-                    CreditItem("ExoPlayer / Media3", "Google's media playback library")
-                    CreditItem("Jetpack Compose", "Modern Android UI toolkit")
-                    CreditItem("Material Design 3", "Google's design system")
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Open Source & Links
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Open Source",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "pypyradio is open source software. " +
-                        "Feel free to contribute, report issues, or fork the project.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    
-                    // GitHub link
-                    val uriHandler = LocalUriHandler.current
-                    TextButton(
-                        onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio") }
-                    ) {
-                        Text("View on GitHub →")
-                    }
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Privacy & Content Rating
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Privacy & Content",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                "E",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Rated Everyone - Family Friendly",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "This app does not collect any personal data. " +
-                        "No ads, no tracking, no analytics.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    Spacer(Modifier.height(8.dp))
-                    val uriHandler = LocalUriHandler.current
-                    TextButton(
-                        onClick = { uriHandler.openUri("https://github.com/pypycodes/pypyradio/blob/main/privacypolicy.html") }
-                    ) {
-                        Text("Privacy Policy →")
-                    }
-                }
-            }
-            
-            Spacer(Modifier.height(24.dp))
-            
+            // Footer
             Text(
-                "Made with ❤️",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(Modifier.height(8.dp))
-            
-            Text(
-                "© 2026 pypyradio",
+                "© 2026",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
-private fun FeatureItem(text: String) {
+private fun InfoRow(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(vertical = 2.dp)
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 4.dp)
     )
-}
-
-@Composable
-private fun CreditItem(title: String, description: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
 }
