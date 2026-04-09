@@ -234,46 +234,12 @@ fun SimpleNowPlayingBar(
                     }
                 }
 
-                Spacer(Modifier.width(8.dp))
-
-                // Controls - more compact and modern
+                // Controls - simplified for mini player
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Favorite button
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    // Previous
-                    FilledTonalIconButton(
-                        onClick = { 
-                            player.seekToPreviousMediaItem()
-                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                                player.prepare()
-                            }
-                            player.play()
-                        },
-                        enabled = hasPrevious,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.SkipPrevious, 
-                            contentDescription = "Previous",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // Play/Pause - larger and prominent
+                    // Play/Pause - large and prominent
                     FilledIconButton(
                         onClick = {
                             if (hasError) {
@@ -290,27 +256,27 @@ fun SimpleNowPlayingBar(
                         },
                         modifier = Modifier.size(48.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     ) {
-                        if (isBuffering) {
+                        if (isBuffering || isReconnecting) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         } else {
                             Icon(
                                 if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
-                                modifier = Modifier.size(28.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
 
                     // Next
-                    FilledTonalIconButton(
+                    IconButton(
                         onClick = { 
                             player.seekToNextMediaItem()
                             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
@@ -319,55 +285,13 @@ fun SimpleNowPlayingBar(
                             player.play()
                         },
                         enabled = hasNext,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             Icons.Default.SkipNext, 
                             contentDescription = "Next",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // Sleep Timer
-                    FilledTonalIconButton(
-                        onClick = onSleepTimerClick,
-                        modifier = Modifier.size(36.dp),
-                        colors = if (sleepTimerMinutes != null) {
-                            IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                            )
-                        } else {
-                            IconButtonDefaults.filledTonalIconButtonColors()
-                        }
-                    ) {
-                        if (sleepTimerMinutes != null) {
-                            Text(
-                                "${sleepTimerMinutes}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Bedtime,
-                                contentDescription = "Sleep Timer",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
-                    // Stop
-                    IconButton(
-                        onClick = { 
-                            player.stop()
-                            player.clearMediaItems()
-                        },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Stop, 
-                            contentDescription = "Stop",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            modifier = Modifier.size(28.dp),
+                            tint = if (hasNext) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                         )
                     }
                 }

@@ -100,6 +100,16 @@ fun BrowseScreen(
                 if (playbackState == Player.STATE_READY) {
                     // Station is working - mark it
                     currentPlayingId?.let { vm.markStationWorking(it) }
+                } else if (playbackState == Player.STATE_ENDED) {
+                    // Live radio doesn't "end". If it ends, it's an unsupported format (like an m3u file) or dead
+                    currentPlayingId?.let { failedId ->
+                        vm.markStationFailed(failedId, "Stream format unsupported")
+                        if (player.hasNextMediaItem()) {
+                            player.seekToNextMediaItem()
+                            player.prepare()
+                            player.play()
+                        }
+                    }
                 }
             }
             
@@ -328,10 +338,10 @@ fun BrowseScreen(
                 }
             }
             
-            // Only filter out blank URLs, keep failed stations so we can show warning mark
-            val displayStations = remember(state.stations) {
+            // Hide failed stations from the list so the user only sees playable ones
+            val displayStations = remember(state.stations, state.failedStationIds) {
                 state.stations.filter { 
-                    it.urlResolved.isNotBlank()
+                    !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
                 }
             }
             
