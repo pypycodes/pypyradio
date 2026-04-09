@@ -175,28 +175,15 @@ fun BrowseScreen(
                 player.stop()
                 player.clearMediaItems()
                 
-                // Build playlist: tapped station FIRST, then others for next/prev
-                // This ensures the tapped station always plays immediately
-                val safeList = stationList.toList()
-                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }
+                // Use the ENTIRE station list for next/prev navigation
+                // Filter out stations with blank URLs
+                val validStations = stationList.filter { it.urlResolved.isNotBlank() }
                 
-                // Build playlist with tapped station at correct position
-                val playlistStations: List<Station>
-                val playlistIndex: Int
+                // Find the index of the tapped station in the valid list
+                val playlistIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
                 
-                if (currentIndex >= 0) {
-                    // Station found in list - build playlist around it
-                    val startIdx = (currentIndex - 2).coerceAtLeast(0)
-                    val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
-                    playlistStations = safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
-                    playlistIndex = playlistStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-                } else {
-                    // Station not in list (edge case) - play just this station
-                    playlistStations = listOf(st)
-                    playlistIndex = 0
-                }
-                
-                val mediaItems = playlistStations.map { station ->
+                // Build media items for ALL valid stations
+                val mediaItems = validStations.map { station ->
                     val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
                         android.net.Uri.parse(it)
                     }
@@ -217,7 +204,9 @@ fun BrowseScreen(
                 }
                 
                 if (mediaItems.isNotEmpty()) {
-                    player.setMediaItems(mediaItems, playlistIndex, 0L)
+                    // If station found in list, start at that index; otherwise start at 0
+                    val startIndex = if (playlistIndex >= 0) playlistIndex else 0
+                    player.setMediaItems(mediaItems, startIndex, 0L)
                     player.prepare()
                     player.play()
                 }

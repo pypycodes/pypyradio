@@ -98,30 +98,18 @@ fun FavoritesScreen(
             }
             
             try {
-                // Stop and build small playlist for next/prev
+                // Stop and build playlist with ALL favorites for next/prev
                 player.stop()
                 player.clearMediaItems()
                 
-                val safeList = favs.toList()
-                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }
+                // Use entire favorites list for navigation
+                val validStations = favs.filter { it.urlResolved.isNotBlank() }
                 
-                // Build playlist with tapped station at correct position
-                val nearbyStations: List<Station>
-                val playlistIndex: Int
+                // Find the index of the tapped station
+                val playlistIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
                 
-                if (currentIndex >= 0) {
-                    // Station found in list - build playlist around it
-                    val startIdx = (currentIndex - 2).coerceAtLeast(0)
-                    val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
-                    nearbyStations = safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
-                    playlistIndex = nearbyStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-                } else {
-                    // Station not found (edge case) - play just this station
-                    nearbyStations = listOf(st)
-                    playlistIndex = 0
-                }
-                
-                val mediaItems = nearbyStations.map { station ->
+                // Build media items for ALL favorites
+                val mediaItems = validStations.map { station ->
                     val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
                         android.net.Uri.parse(it)
                     }
@@ -142,7 +130,9 @@ fun FavoritesScreen(
                 }
                 
                 if (mediaItems.isNotEmpty()) {
-                    player.setMediaItems(mediaItems, playlistIndex, 0L)
+                    // If station found in list, start at that index; otherwise start at 0
+                    val startIndex = if (playlistIndex >= 0) playlistIndex else 0
+                    player.setMediaItems(mediaItems, startIndex, 0L)
                     player.prepare()
                     player.play()
                 }

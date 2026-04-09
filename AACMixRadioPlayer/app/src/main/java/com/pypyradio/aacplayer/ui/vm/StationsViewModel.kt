@@ -51,38 +51,25 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     }
     
     /**
-     * Starts periodic health check that runs every 5 minutes
-     * Re-checks failed stations to see if they're back online
-     * Also checks a batch of unchecked stations
+     * Continuous background health checker
+     * - Checks ALL unchecked stations (not just a few)
+     * - Re-checks failed stations periodically (they might come back online)
+     * - Runs continuously while app is open
      */
     private fun startPeriodicHealthCheck() = viewModelScope.launch(Dispatchers.IO) {
+        // Initial delay before starting
+        delay(10_000L) // Wait 10 seconds after app start
+        
         while (true) {
-            delay(5 * 60 * 1000L) // Wait 5 minutes
-            
-            // Re-check some failed stations (they might be back online)
-            val failedToRecheck = _browse.value.failedStationIds.take(10)
-            failedToRecheck.forEach { stationId ->
-                val station = _browse.value.stations.find { it.stationuuid == stationId }
-                if (station != null) {
-                    try {
-                        val isReachable = checkUrlReachable(station.urlResolved)
-                        if (isReachable) {
-                            markStationWorkingSilent(stationId)
-                        }
-                    } catch (e: Exception) {
-                        // Ignore
-                    }
-                    delay(300)
-                }
+            // Get all unchecked stations
+            val uncheckedStations = _browse.value.stations.filter { station ->
+                val id = station.stationuuid
+                !_browse.value.workingStationIds.contains(id) && 
+                !_browse.value.failedStationIds.contains(id)
             }
             
-            // Also check some unchecked stations
-            val unchecked = _browse.value.stations.filter { station ->
-                !_browse.value.workingStationIds.contains(station.stationuuid) &&
-                !_browse.value.failedStationIds.contains(station.stationuuid)
-            }.take(20)
-            
-            unchecked.forEach { station ->
+            // Check all unchecked stations
+            for (station in uncheckedStations) {
                 try {
                     val isReachable = checkUrlReachable(station.urlResolved)
                     if (isReachable) {
@@ -91,10 +78,32 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
                         markStationFailedSilent(station.stationuuid)
                     }
                 } catch (e: Exception) {
+                    // Ignore individual failures
+                }
+                delay(500) // 500ms between checks to be gentle on network
+            }
+            
+            // After checking all unchecked, re-check some failed stations
+            // (they might have come back online)
+            val failedStations = _browse.value.stations.filter { station ->
+                _browse.value.failedStationIds.contains(station.stationuuid)
+            }
+            
+            for (station in failedStations) {
+                try {
+                    val isReachable = checkUrlReachable(station.urlResolved)
+                    if (isReachable) {
+                        // Station is back online!
+                        markStationWorkingSilent(station.stationuuid)
+                    }
+                } catch (e: Exception) {
                     // Ignore
                 }
-                delay(300)
+                delay(500)
             }
+            
+            // Wait 2 minutes before next full cycle
+            delay(2 * 60 * 1000L)
         }
     }
     
@@ -223,7 +232,7 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     
     /**
      * Background health checker - runs silently without UI notifications
-     * Checks station URLs to see if they're reachable
+     * Checks ALL unchecked station URLs to see if they're reachable
      * Called automatically when stations are loaded
      */
     private fun runBackgroundHealthCheck(stations: List<Station>) = viewModelScope.launch(Dispatchers.IO) {
@@ -231,13 +240,14 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         isCheckingHealth = true
         
         try {
-            // Only check stations we haven't checked yet
+            // Check ALL stations we haven't checked yet
             val uncheckedStations = stations.filter { station ->
                 val id = station.stationuuid
                 !_browse.value.workingStationIds.contains(id) && !_browse.value.failedStationIds.contains(id)
-            }.take(30) // Check max 30 at a time to be gentle on network
+            }
             
-            uncheckedStations.forEach { station ->
+            // Check all unchecked stations
+            for (station in uncheckedStations) {
                 try {
                     val isReachable = checkUrlReachable(station.urlResolved)
                     if (isReachable) {
@@ -248,7 +258,7 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: Exception) {
                     // Silently ignore individual check failures
                 }
-                delay(200) // Gentle delay between checks
+                delay(300) // 300ms between checks
             }
         } finally {
             isCheckingHealth = false
