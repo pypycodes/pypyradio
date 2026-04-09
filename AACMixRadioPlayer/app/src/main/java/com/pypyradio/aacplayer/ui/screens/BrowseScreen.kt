@@ -91,8 +91,6 @@ fun BrowseScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
-    var errorRetryCount by remember { mutableStateOf(0) }
-    val maxAutoRetries = 3
     
     // Listen to player state with auto-skip on error
     DisposableEffect(player) {
@@ -135,7 +133,6 @@ fun BrowseScreen(
                 if (playbackState == Player.STATE_READY) {
                     // Station is working - mark it
                     currentPlayingId?.let { vm.markStationWorking(it) }
-                    errorRetryCount = 0
                 }
             }
         }
