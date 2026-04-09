@@ -193,19 +193,16 @@ fun BrowseScreen(
                 player.stop()
                 player.clearMediaItems()
                 
-                // CRITICAL: Always create the tapped station's media item FIRST
-                val tappedMediaItem = createMediaItem(st)
+                // Build playlist from all valid stations in original order
+                val validStations = stationList.filter { it.urlResolved.isNotBlank() }
+                val mediaItems = validStations.map { createMediaItem(it) }
                 
-                // Get other valid stations for next/prev (excluding the tapped one)
-                val otherStations = stationList
-                    .filter { it.urlResolved.isNotBlank() && it.stationuuid != st.stationuuid }
+                // Find the index of the tapped station
+                val startIndex = validStations.indexOfFirst { it.stationuuid == st.stationuuid }
+                    .coerceAtLeast(0)
                 
-                // Build playlist: tapped station at index 0, others after
-                val allMediaItems = mutableListOf(tappedMediaItem)
-                allMediaItems.addAll(otherStations.map { createMediaItem(it) })
-                
-                // Play starting at index 0 (the tapped station)
-                player.setMediaItems(allMediaItems, 0, 0L)
+                // Play starting at the tapped station's position
+                player.setMediaItems(mediaItems, startIndex, 0L)
                 player.prepare()
                 player.play()
                 
