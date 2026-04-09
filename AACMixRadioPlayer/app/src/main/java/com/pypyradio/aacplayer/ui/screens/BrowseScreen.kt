@@ -102,7 +102,7 @@ fun BrowseScreen(
     }
     
     // Play station with playlist for next/prev support
-    fun playStation(st: Station, stationList: List<Station>) {
+    fun playStation(st: Station) {
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
         lastPlayTime = now
@@ -127,16 +127,27 @@ fun BrowseScreen(
             return
         }
         
-        // Build playlist from all stations for next/prev support
+        // Use the full station list (not the filtered displayStations) for building
+        // the playlist. The filtered list is unstable because the background health
+        // checker continuously changes failedStationIds, causing the list to shift.
+        // Using the snapshot from state.stations ensures the index lookup is reliable.
+        val allStations = state.stations.filter { it.urlResolved.isNotBlank() }
+        
         try {
             player.stop()
             player.clearMediaItems()
             
-            val mediaItems = stationList.map { createMediaItem(it) }
-            val startIndex = stationList.indexOfFirst { it.stationuuid == st.stationuuid }
-                .coerceAtLeast(0)
+            val mediaItems = allStations.map { createMediaItem(it) }
+            val startIndex = allStations.indexOfFirst { it.stationuuid == st.stationuuid }
             
-            player.setMediaItems(mediaItems, startIndex, 0L)
+            if (startIndex >= 0) {
+                // Found in the list — set full playlist with correct start index
+                player.setMediaItems(mediaItems, startIndex, 0L)
+            } else {
+                // Station not found in the list (edge case) — play it directly
+                player.setMediaItem(createMediaItem(st))
+            }
+            
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
@@ -273,7 +284,7 @@ fun BrowseScreen(
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
-                                onRowClick = { playStation(st, displayStations) },
+                                onRowClick = { playStation(st) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
                         }
