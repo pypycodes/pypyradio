@@ -179,6 +179,10 @@ fun BrowseScreen(
                         player.pause()
                         isPlaying = false
                     } else {
+                        // Prepare if needed (player might be in IDLE or ENDED state)
+                        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                            player.prepare()
+                        }
                         player.play()
                         isPlaying = true
                     }

@@ -32,6 +32,7 @@ import coil.compose.AsyncImage
 fun SimpleNowPlayingBar(
     player: Player,
     isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onStationFailed: (String) -> Unit = {},
     sleepTimerMinutes: Int? = null,
     onSleepTimerClick: () -> Unit = {}
@@ -171,24 +172,6 @@ fun SimpleNowPlayingBar(
                             }
                         }
                     }
-                    // Favorite indicator
-                    if (isFavorite) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
-                                .size(18.dp),
-                            shape = CircleShape,
-                            color = Color.White
-                        ) {
-                            Icon(
-                                Icons.Default.Favorite,
-                                contentDescription = "Favorite",
-                                tint = Color(0xFFE91E63),
-                                modifier = Modifier.padding(2.dp)
-                            )
-                        }
-                    }
                 }
                 
                 Spacer(Modifier.width(10.dp))
@@ -244,9 +227,28 @@ fun SimpleNowPlayingBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Favorite button
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
                     // Previous
                     FilledTonalIconButton(
-                        onClick = { player.seekToPreviousMediaItem() },
+                        onClick = { 
+                            player.seekToPreviousMediaItem()
+                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                                player.prepare()
+                            }
+                            player.play()
+                        },
                         enabled = hasPrevious,
                         modifier = Modifier.size(36.dp)
                     ) {
@@ -295,7 +297,13 @@ fun SimpleNowPlayingBar(
 
                     // Next
                     FilledTonalIconButton(
-                        onClick = { player.seekToNextMediaItem() },
+                        onClick = { 
+                            player.seekToNextMediaItem()
+                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                                player.prepare()
+                            }
+                            player.play()
+                        },
                         enabled = hasNext,
                         modifier = Modifier.size(36.dp)
                     ) {

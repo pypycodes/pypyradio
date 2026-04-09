@@ -65,7 +65,14 @@ fun PodcastScreen(
     fun playEpisode(episode: PodcastEpisode, allEpisodes: List<PodcastEpisode>) {
         // Toggle play/pause if same episode
         if (currentPlayingId == episode.id) {
-            if (player.isPlaying) player.pause() else player.play()
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
+                player.play()
+            }
             return
         }
         

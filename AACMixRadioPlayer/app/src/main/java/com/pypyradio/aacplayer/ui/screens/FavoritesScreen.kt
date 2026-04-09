@@ -121,7 +121,16 @@ fun FavoritesScreen(
         val url = st.urlResolved
         if (url.isNotBlank()) {
             if (currentPlayingId == st.stationuuid) {
-                try { if (player.isPlaying) player.pause() else player.play() } catch (e: Exception) {}
+                try { 
+                    if (player.isPlaying) {
+                        player.pause()
+                    } else {
+                        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                            player.prepare()
+                        }
+                        player.play()
+                    }
+                } catch (e: Exception) {}
                 return
             }
             
@@ -155,25 +164,22 @@ fun FavoritesScreen(
     
     fun playEpisode(episode: PodcastEpisode, allEpisodes: List<PodcastEpisode>) {
         if (currentPlayingId == episode.id) {
-            if (player.isPlaying) player.pause() else player.play()
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
+                player.play()
+            }
             return
         }
         
         player.stop()
         player.clearMediaItems()
         
-        val tappedItem = MediaItem.Builder()
-            .setMediaId(episode.id)
-            .setUri(episode.audioUrl)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(episode.title)
-                    .setArtist(episode.podcastTitle ?: episode.author)
-                    .build()
-            )
-            .build()
-        
-        val otherItems = allEpisodes.filter { it.id != episode.id }.map { ep ->
+        // Build playlist in original order
+        val mediaItems = allEpisodes.map { ep ->
             MediaItem.Builder()
                 .setMediaId(ep.id)
                 .setUri(ep.audioUrl)
@@ -186,9 +192,10 @@ fun FavoritesScreen(
                 .build()
         }
         
-        val allItems = mutableListOf(tappedItem)
-        allItems.addAll(otherItems)
-        player.setMediaItems(allItems, 0, 0L)
+        // Find the index of the tapped episode
+        val startIndex = allEpisodes.indexOfFirst { it.id == episode.id }.coerceAtLeast(0)
+        
+        player.setMediaItems(mediaItems, startIndex, 0L)
         player.prepare()
         player.play()
     }
