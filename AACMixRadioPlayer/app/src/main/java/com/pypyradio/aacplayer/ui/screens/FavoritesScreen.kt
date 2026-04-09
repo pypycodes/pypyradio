@@ -88,6 +88,11 @@ fun FavoritesScreen(
         return MediaItem.Builder()
             .setMediaId(station.stationuuid)
             .setUri(station.urlResolved)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(android.net.Uri.parse(station.urlResolved))
+                    .build()
+            )
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(station.name)
@@ -163,6 +168,11 @@ fun FavoritesScreen(
         val mediaItem = MediaItem.Builder()
             .setMediaId(episode.id)
             .setUri(episode.audioUrl)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(android.net.Uri.parse(episode.audioUrl))
+                    .build()
+            )
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(episode.title)

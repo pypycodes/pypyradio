@@ -159,17 +159,25 @@ class RadioPlaybackService : MediaLibraryService() {
                 // Check if it's a podcast episode
                 if (mediaId.startsWith("episode_")) {
                     val episodeId = mediaId.removePrefix("episode_")
-                    podcastEpisodesCache.values.flatten().find { it.id == episodeId }?.let {
-                        playableFromEpisode(it)
-                    }
+                    val ep = podcastEpisodesCache.values.flatten().find { it.id == episodeId }
+                    if (ep != null) return@mapNotNull playableFromEpisode(ep)
                 } else {
                     // Find station in our lists and include URI for playback
                     val station = topStations.find { it.stationuuid == mediaId }
                         ?: topHindiStations.find { it.stationuuid == mediaId }
                         ?: topEnglishStations.find { it.stationuuid == mediaId }
                         ?: favoriteStations.find { it.stationuuid == mediaId }
-                    station?.let { playableFromStation(it, includeUri = true) }
+                    if (station != null) return@mapNotNull playableFromStation(station, includeUri = true)
                 }
+                
+                // If not found in caches but controller provided a requestMetadata with mediaUri
+                if (requestedItem.requestMetadata.mediaUri != null) {
+                    return@mapNotNull requestedItem.buildUpon()
+                        .setUri(requestedItem.requestMetadata.mediaUri)
+                        .build()
+                }
+                
+                null
             }.toMutableList()
             
             return Futures.immediateFuture(
@@ -190,18 +198,9 @@ class RadioPlaybackService : MediaLibraryService() {
                 scope.launch(Dispatchers.IO) { repo.pingClick(id) }
             }
             
-            // If playlist has multiple items with URIs, use it directly (from app UI)
-            // This handles India/Hindi tab, Favorites, search results, etc.
-            if (mediaItems.size > 1 || (mediaItems.size == 1 && mediaItems[0].localConfiguration != null)) {
-                // Playlist from app UI - use as-is
-                return Futures.immediateFuture(
-                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
-                )
-            }
-            
-            // Single item without URI - Android Auto browsing request
+            // Single item without specific URI requestMetadata - Android Auto browsing request
             // Determine which playlist context this station belongs to and expand for next/prev
-            if (mediaItems.size == 1 && mediaItems[0].localConfiguration == null) {
+            if (mediaItems.size == 1 && mediaItems[0].requestMetadata.mediaUri == null) {
                 // Find which list contains this station and build full playlist WITH URIs for playback
                 val (playlist, context) = when {
                     topHindiStations.any { it.stationuuid == id } -> 

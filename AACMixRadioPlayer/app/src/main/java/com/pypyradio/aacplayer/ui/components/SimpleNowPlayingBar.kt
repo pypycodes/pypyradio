@@ -35,7 +35,8 @@ fun SimpleNowPlayingBar(
     onToggleFavorite: () -> Unit = {},
     onStationFailed: (String) -> Unit = {},
     sleepTimerMinutes: Int? = null,
-    onSleepTimerClick: () -> Unit = {}
+    onSleepTimerClick: () -> Unit = {},
+    onClick: () -> Unit = {}
 ) {
     var title by remember { mutableStateOf<String?>(null) }
     var mediaId by remember { mutableStateOf<String?>(null) }
@@ -135,7 +136,8 @@ fun SimpleNowPlayingBar(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 12.dp,
         shadowElevation = 8.dp,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        onClick = onClick
     ) {
         Column {
             // Progress indicator for buffering/playing

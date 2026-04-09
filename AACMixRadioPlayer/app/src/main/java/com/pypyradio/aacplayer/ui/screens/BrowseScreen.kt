@@ -83,6 +83,11 @@ fun BrowseScreen(
         return androidx.media3.common.MediaItem.Builder()
             .setMediaId(station.stationuuid)
             .setUri(station.urlResolved)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(android.net.Uri.parse(station.urlResolved))
+                    .build()
+            )
             .setMediaMetadata(
                 androidx.media3.common.MediaMetadata.Builder()
                     .setTitle(station.name)
@@ -236,8 +241,10 @@ fun BrowseScreen(
             }
 
             when {
-                state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                state.loading && state.error == null -> {
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        items(10) { SkeletonStationRow() }
+                    }
                 }
                 state.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -409,6 +416,48 @@ private fun StationRow(
                     tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
                 ) 
             }
+        }
+    }
+}
+
+@Composable
+fun SkeletonStationRow() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {}
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.6f).height(20.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {}
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.3f).height(14.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {}
+            }
+            Spacer(Modifier.width(12.dp))
+            Surface(
+                modifier = Modifier.size(36.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ) {}
         }
     }
 }

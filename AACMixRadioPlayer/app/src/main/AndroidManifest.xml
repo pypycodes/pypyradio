@@ -10,9 +10,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- WAKE_LOCK: Required to keep network alive during Android Auto playback -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: Prevents Doze mode from killing network during background playback -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
     <application
         android:name=".AACRadioApp"
         android:label="@string/app_name"
@@ -34,6 +31,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.App.Starting"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -48,6 +46,7 @@
             android:foregroundServiceType="mediaPlayback"
             android:icon="@mipmap/ic_launcher">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
