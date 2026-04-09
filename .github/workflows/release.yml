@@ -116,6 +116,11 @@ jobs:
           name: release-aab
           path: ./release
 
+      - name: Create Release Notes
+        run: |
+          mkdir -p whatsnew
+          echo "Bug Fixes and Improvements" > whatsnew/whatsnew-en-US
+
       - name: Upload to Google Play Internal Testing
         uses: r0adkll/upload-google-play@v1
         with:
@@ -124,4 +129,5 @@ jobs:
           releaseFiles: ./release/*.aab
           track: internal
           status: completed
-          releaseName: v${{ needs.check-version-change.outputs.version_name }}
+          releaseName: ${{ needs.check-version-change.outputs.version_name }}
+          whatsNewDirectory: whatsnew
