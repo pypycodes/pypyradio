@@ -400,16 +400,16 @@ class RadioPlaybackService : MediaLibraryService() {
             .build()
 
         // Prefetch top stations for browsing (but don't auto-load into player - Android Auto requirement MA-1)
-        topStations = runBlocking { withContext(Dispatchers.IO) { repo.topVotedAac(120) ?: emptyList() } }
+        topStations = runBlocking { withContext(Dispatchers.IO) { repo.topVotedAac(120) } }
         
         // Prefetch Top Hindi stations
-        topHindiStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("hindi", 100) ?: emptyList() } }
+        topHindiStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("hindi", 100) } }
         
         // Prefetch Top English stations
-        topEnglishStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("english", 100) ?: emptyList() } }
+        topEnglishStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("english", 100) } }
         
         // Prefetch trending podcasts for Android Auto browsing
-        trendingPodcasts = runBlocking { withContext(Dispatchers.IO) { podcastRepo.getTrendingPodcasts(50) ?: emptyList() } }
+        trendingPodcasts = runBlocking { withContext(Dispatchers.IO) { podcastRepo.getTrendingPodcasts(50) } }
 
         // Keep favorites updated
         scope.launch {
