@@ -18,26 +18,19 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
-import androidx.media3.session.MediaController
 import coil.compose.AsyncImage
 import com.pypyradio.aacplayer.data.model.Station
-import com.pypyradio.aacplayer.data.prefs.AppPreferences
-import com.pypyradio.aacplayer.playback.RadioController
-import com.pypyradio.aacplayer.ui.vm.StationFilter
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Main tabs - English and Indian radio only
@@ -98,14 +91,52 @@ fun BrowseScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
+    var errorRetryCount by remember { mutableStateOf(0) }
+    val maxAutoRetries = 3
     
-    // Listen to player state
+    // Listen to player state with auto-skip on error
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
                 isBuffering = p.playbackState == Player.STATE_BUFFERING
+            }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val failedId = player.currentMediaItem?.mediaId
+                if (failedId != null) {
+                    // Mark station as failed
+                    vm.markStationFailed(failedId, error.message ?: "Playback error")
+                    
+                    // Auto-skip to next station
+                    if (player.hasNextMediaItem()) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Skipping unavailable station...",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        player.play()
+                    } else {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Station unavailable",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
+                }
+            }
+            
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    // Station is working - mark it
+                    currentPlayingId?.let { vm.markStationWorking(it) }
+                    errorRetryCount = 0
+                }
             }
         }
         player.addListener(listener)
@@ -147,21 +178,28 @@ fun BrowseScreen(
                 player.stop()
                 player.clearMediaItems()
                 
-                // Build small playlist (5 stations) for next/prev with safe handling
+                // Build playlist: tapped station FIRST, then others for next/prev
+                // This ensures the tapped station always plays immediately
                 val safeList = stationList.toList()
-                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-                val startIdx = (currentIndex - 2).coerceAtLeast(0)
-                val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
+                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }
                 
-                val nearbyStations = if (safeList.size > 1 && endIdx > startIdx) {
-                    safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
+                // Build playlist with tapped station at correct position
+                val playlistStations: List<Station>
+                val playlistIndex: Int
+                
+                if (currentIndex >= 0) {
+                    // Station found in list - build playlist around it
+                    val startIdx = (currentIndex - 2).coerceAtLeast(0)
+                    val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
+                    playlistStations = safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
+                    playlistIndex = playlistStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
                 } else {
-                    listOf(st)
+                    // Station not in list (edge case) - play just this station
+                    playlistStations = listOf(st)
+                    playlistIndex = 0
                 }
                 
-                val playlistIndex = nearbyStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-                
-                val mediaItems = nearbyStations.map { station ->
+                val mediaItems = playlistStations.map { station ->
                     val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
                         android.net.Uri.parse(it)
                     }
@@ -191,7 +229,7 @@ fun BrowseScreen(
                 currentPlayingId = st.stationuuid
                 isPlaying = true
             } catch (e: Exception) {
-                // Fallback: try single station
+                // Fallback: try single station directly
                 try {
                     player.stop()
                     player.clearMediaItems()
@@ -503,62 +541,9 @@ fun BrowseScreen(
                 MainTab.HINDI -> { /* No sub-filters for Hindi */ }
             }
             
-            // Filter chips and auto-skip toggle
-            val context = LocalContext.current
-            val prefs = remember { AppPreferences.get(context) }
-            val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilterChip(
-                    selected = state.filter == StationFilter.ALL,
-                    onClick = { vm.setFilter(StationFilter.ALL) },
-                    label = { Text("All") }
-                )
-                FilterChip(
-                    selected = state.filter == StationFilter.HIDE_FAILED,
-                    onClick = { vm.setFilter(StationFilter.HIDE_FAILED) },
-                    label = { Text("Hide Failed") }
-                )
-                FilterChip(
-                    selected = state.filter == StationFilter.WORKING_ONLY,
-                    onClick = { vm.setFilter(StationFilter.WORKING_ONLY) },
-                    label = { Text("Working Only") }
-                )
-                
-                Spacer(Modifier.width(8.dp))
-                
-                // Auto-skip toggle
-                FilterChip(
-                    selected = autoSkipEnabled,
-                    onClick = { prefs.setAutoSkipEnabled(!autoSkipEnabled) },
-                    label = { 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.SkipNext,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Auto-Skip")
-                        }
-                    }
-                )
-            }
-            
-            // Get filtered stations based on current state
-            val filteredStations = remember(state.stations, state.filter, state.failedStationIds, state.workingStationIds) {
-                when (state.filter) {
-                    StationFilter.ALL -> state.stations
-                    StationFilter.WORKING_ONLY -> state.stations.filter { state.workingStationIds.contains(it.stationuuid) }
-                    StationFilter.HIDE_FAILED -> state.stations.filter { !state.failedStationIds.contains(it.stationuuid) }
-                }
+            // Filtered stations - auto-hide failed stations
+            val filteredStations = remember(state.stations, state.failedStationIds) {
+                state.stations.filter { !state.failedStationIds.contains(it.stationuuid) }
             }
             
             // Pagination
@@ -587,10 +572,12 @@ fun BrowseScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val countText = when (state.filter) {
-                            StationFilter.ALL -> "${filteredStations.size} stations"
-                            StationFilter.HIDE_FAILED -> "${filteredStations.size} stations (hiding ${state.failedStationIds.size} failed)"
-                            StationFilter.WORKING_ONLY -> "${filteredStations.size} working stations"
+                        // Station count with failed info
+                        val failedCount = state.failedStationIds.size
+                        val countText = if (failedCount > 0) {
+                            "${filteredStations.size} stations (${failedCount} unavailable hidden)"
+                        } else {
+                            "${filteredStations.size} stations"
                         }
                         Text(
                             countText,
@@ -605,9 +592,9 @@ fun BrowseScreen(
                             )
                         }
                     }
-                    // Subtle disclaimer
+                    // Simple hint
                     Text(
-                        "Free stations may occasionally be unavailable",
+                        "Auto-skips unavailable stations",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -659,15 +646,9 @@ fun BrowseScreen(
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
                                 onRowClick = { 
-                                    // Use state.stations directly to ensure we have the current list
-                                    val currentStations = state.stations.let { stations ->
-                                        when (state.filter) {
-                                            StationFilter.ALL -> stations
-                                            StationFilter.WORKING_ONLY -> stations.filter { state.workingStationIds.contains(it.stationuuid) }
-                                            StationFilter.HIDE_FAILED -> stations.filter { !state.failedStationIds.contains(it.stationuuid) }
-                                        }
-                                    }
-                                    playStation(st, currentStations)
+                                    // Pass filteredStations for next/prev navigation
+                                    // The tapped station (st) is already the correct one
+                                    playStation(st, filteredStations)
                                 },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )

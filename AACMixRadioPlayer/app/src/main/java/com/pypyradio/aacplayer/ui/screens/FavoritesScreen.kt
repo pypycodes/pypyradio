@@ -19,6 +19,7 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,17 +30,45 @@ fun FavoritesScreen(
     modifier: Modifier = Modifier
 ) {
     val favs by vm.favorites.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     var currentPlayingId by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
     
-    // Listen to player state
+    // Listen to player state with auto-skip on error
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
+            }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val failedId = player.currentMediaItem?.mediaId
+                if (failedId != null) {
+                    vm.markStationFailed(failedId, error.message ?: "Playback error")
+                    
+                    // Auto-skip to next station
+                    if (player.hasNextMediaItem()) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Skipping unavailable station...",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        player.play()
+                    }
+                }
+            }
+            
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    currentPlayingId?.let { vm.markStationWorking(it) }
+                }
             }
         }
         player.addListener(listener)
@@ -74,17 +103,23 @@ fun FavoritesScreen(
                 player.clearMediaItems()
                 
                 val safeList = favs.toList()
-                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-                val startIdx = (currentIndex - 2).coerceAtLeast(0)
-                val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
+                val currentIndex = safeList.indexOfFirst { it.stationuuid == st.stationuuid }
                 
-                val nearbyStations = if (safeList.size > 1 && endIdx > startIdx) {
-                    safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
+                // Build playlist with tapped station at correct position
+                val nearbyStations: List<Station>
+                val playlistIndex: Int
+                
+                if (currentIndex >= 0) {
+                    // Station found in list - build playlist around it
+                    val startIdx = (currentIndex - 2).coerceAtLeast(0)
+                    val endIdx = (currentIndex + 3).coerceAtMost(safeList.size)
+                    nearbyStations = safeList.subList(startIdx, endIdx).filter { it.urlResolved.isNotBlank() }
+                    playlistIndex = nearbyStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
                 } else {
-                    listOf(st)
+                    // Station not found (edge case) - play just this station
+                    nearbyStations = listOf(st)
+                    playlistIndex = 0
                 }
-                
-                val playlistIndex = nearbyStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
                 
                 val mediaItems = nearbyStations.map { station ->
                     val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
