@@ -3,33 +3,64 @@ package com.pypyradio.aacplayer.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
 import kotlinx.coroutines.launch
+
+// Category definition for browse chips
+private data class BrowseCategory(
+    val id: String,
+    val label: String,
+    val emoji: String
+)
+
+private val BROWSE_CATEGORIES = listOf(
+    BrowseCategory("popular", "Popular", "🔥"),
+    BrowseCategory("music", "Music", "🎵"),
+    BrowseCategory("news", "News", "📰"),
+    BrowseCategory("talk", "Talk", "🗣️"),
+    BrowseCategory("sports", "Sports", "⚽"),
+    BrowseCategory("hindi", "Hindi", "🇮🇳"),
+    BrowseCategory("english", "English", "🇬🇧"),
+    BrowseCategory("tamil", "Tamil", "🎶"),
+    BrowseCategory("telugu", "Telugu", "🎤"),
+    BrowseCategory("classical", "Classical", "🎻"),
+    BrowseCategory("rock", "Rock", "🎸"),
+    BrowseCategory("jazz", "Jazz", "🎷"),
+    BrowseCategory("pop", "Pop", "🎧"),
+    BrowseCategory("lofi", "Lo-Fi", "🌙"),
+    BrowseCategory("ambient", "Ambient", "🌊")
+)
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,6 +82,9 @@ fun BrowseScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
+    
+    // Selected category
+    var selectedCategory by remember { mutableStateOf("popular") }
     
     // Listen to player state
     DisposableEffect(player) {
@@ -75,33 +109,12 @@ fun BrowseScreen(
         onDispose { player.removeListener(listener) }
     }
     
-    // Helper function to create a MediaItem from a Station
-    fun createMediaItem(station: Station): androidx.media3.common.MediaItem {
-        val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
-            android.net.Uri.parse(it)
-        }
-        return androidx.media3.common.MediaItem.Builder()
-            .setMediaId(station.stationuuid)
-            .setUri(station.urlResolved)
-            .setRequestMetadata(
-                androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(android.net.Uri.parse(station.urlResolved))
-                    .build()
-            )
-            .setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder()
-                    .setTitle(station.name)
-                    .setArtist(station.countryCode ?: "Radio")
-                    .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                    .setArtworkUri(artworkUri)
-                    .setMediaType(androidx.media3.common.MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .setIsPlayable(true)
-                    .build()
-            )
-            .build()
-    }
-    
-    // Play station with playlist for next/prev support
+    // Play a single station — this is the RELIABLE approach.
+    // Sending a single item via MediaController avoids IPC serialization issues
+    // where onAddMediaItems in the service can drop/reorder items from a large playlist,
+    // causing startIndex to become 0 (always playing the first station).
+    // The service's onSetMediaItems will expand single items into playlists from its own
+    // caches for next/prev support (no IPC size concerns since it builds the playlist locally).
     fun playStation(st: Station) {
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
@@ -127,27 +140,37 @@ fun BrowseScreen(
             return
         }
         
-        // Use the full station list (not the filtered displayStations) for building
-        // the playlist. The filtered list is unstable because the background health
-        // checker continuously changes failedStationIds, causing the list to shift.
-        // Using the snapshot from state.stations ensures the index lookup is reliable.
-        val allStations = state.stations.filter { it.urlResolved.isNotBlank() }
-        
         try {
             player.stop()
             player.clearMediaItems()
             
-            val mediaItems = allStations.map { createMediaItem(it) }
-            val startIndex = allStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            
-            if (startIndex >= 0) {
-                // Found in the list — set full playlist with correct start index
-                player.setMediaItems(mediaItems, startIndex, 0L)
-            } else {
-                // Station not found in the list (edge case) — play it directly
-                player.setMediaItem(createMediaItem(st))
+            // Build a single MediaItem with requestMetadata containing the stream URI.
+            // The service resolves this in onAddMediaItems and can expand it to a
+            // playlist in onSetMediaItems for next/prev support.
+            val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let {
+                android.net.Uri.parse(it)
             }
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(st.stationuuid)
+                .setUri(st.urlResolved)
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
+                        .build()
+                )
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(st.name)
+                        .setArtist(st.countryCode ?: "Radio")
+                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                        .setArtworkUri(artworkUri)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .setIsPlayable(true)
+                        .build()
+                )
+                .build()
             
+            player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
@@ -157,7 +180,30 @@ fun BrowseScreen(
         }
     }
     
-    // Load top stations on first launch
+    // Load category based on selection
+    fun loadCategory(categoryId: String) {
+        selectedCategory = categoryId
+        when (categoryId) {
+            "popular" -> vm.loadTop()
+            "music" -> vm.searchByTag("music")
+            "news" -> vm.searchByLanguageAndTag("english", "news")
+            "talk" -> vm.searchByTag("talk")
+            "sports" -> vm.searchByTag("sports")
+            "hindi" -> vm.searchByLanguage("hindi")
+            "english" -> vm.searchByLanguage("english")
+            "tamil" -> vm.searchByLanguage("tamil")
+            "telugu" -> vm.searchByLanguage("telugu")
+            "classical" -> vm.searchByTag("classical")
+            "rock" -> vm.searchByTag("rock")
+            "jazz" -> vm.searchByTag("jazz")
+            "pop" -> vm.searchByTag("pop")
+            "lofi" -> vm.searchByTag("lofi")
+            "ambient" -> vm.searchByTag("ambient")
+            else -> vm.loadTop()
+        }
+    }
+    
+    // Load initial stations
     LaunchedEffect(Unit) {
         vm.loadTop()
     }
@@ -219,7 +265,7 @@ fun BrowseScreen(
                     if (state.query.isNotEmpty()) {
                         IconButton(onClick = { 
                             vm.setQuery("")
-                            vm.loadTop()  // Reload top stations when cleared
+                            loadCategory(selectedCategory) // Reload current category when cleared
                         }) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
                         }
@@ -234,17 +280,55 @@ fun BrowseScreen(
                 }
             }
             
-            // Filter out failed stations
+            // Category chips - horizontal scrollable row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BROWSE_CATEGORIES.forEach { category ->
+                    val isSelected = selectedCategory == category.id && state.query.isEmpty()
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            vm.setQuery("") // Clear search when switching categories
+                            loadCategory(category.id)
+                        },
+                        label = {
+                            Text(
+                                "${category.emoji} ${category.label}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
+            }
+            
+            // Filter out failed stations for display
             val displayStations = remember(state.stations, state.failedStationIds) {
                 state.stations.filter { 
                     !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
                 }
             }
             
-            // Station count
+            // Station count and current category label
             if (!state.loading && state.error == null && displayStations.isNotEmpty()) {
+                val categoryLabel = if (state.query.isNotEmpty()) {
+                    "\"${state.query}\""
+                } else {
+                    BROWSE_CATEGORIES.find { it.id == selectedCategory }?.let { 
+                        "${it.emoji} ${it.label}" 
+                    } ?: "Popular"
+                }
                 Text(
-                    "${displayStations.size} stations • Search to find more",
+                    "${displayStations.size} stations in $categoryLabel",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -261,14 +345,14 @@ fun BrowseScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Failed to load", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = { vm.loadTop() }) { Text("Retry") }
+                        TextButton(onClick = { loadCategory(selectedCategory) }) { Text("Retry") }
                     }
                 }
                 displayStations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("No stations found", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
-                        Text("Try a different search", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Try a different category or search", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     }
                 }
                 else -> {
