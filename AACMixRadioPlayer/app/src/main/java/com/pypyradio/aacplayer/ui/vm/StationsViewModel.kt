@@ -45,7 +45,8 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init { 
-        searchByLanguage("english") // Default to English stations
+        // Don't load stations here — BrowseScreen handles initial loading via its
+        // LaunchedEffect to avoid race conditions between competing station lists.
         loadStationStatuses()
         startPeriodicHealthCheck()
     }

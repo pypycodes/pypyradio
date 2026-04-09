@@ -198,10 +198,13 @@ class RadioPlaybackService : MediaLibraryService() {
                 scope.launch(Dispatchers.IO) { repo.pingClick(id) }
             }
             
-            // Single item without specific URI requestMetadata - Android Auto browsing request
-            // Determine which playlist context this station belongs to and expand for next/prev
-            if (mediaItems.size == 1 && mediaItems[0].requestMetadata.mediaUri == null) {
-                // Find which list contains this station and build full playlist WITH URIs for playback
+            // Single item play request — from both Android Auto browsing and app tap.
+            // Expand into a full playlist from our cached lists for next/prev support.
+            // This avoids IPC serialization issues that occur when the app sends a large
+            // playlist through MediaController (items can be dropped in onAddMediaItems,
+            // causing startIndex to point to the wrong station, typically index 0).
+            if (mediaItems.size == 1 && id != null) {
+                // Find which cached list contains this station and build full playlist
                 val (playlist, context) = when {
                     topHindiStations.any { it.stationuuid == id } -> 
                         topHindiStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_HINDI
@@ -214,7 +217,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     else -> {
                         // Check podcast episodes
                         val episode = podcastEpisodesCache.entries.find { (_, eps) -> 
-                            eps.any { it.id == id?.removePrefix("episode_") }
+                            eps.any { it.id == id.removePrefix("episode_") }
                         }
                         if (episode != null) {
                             episode.value.map { playableFromEpisode(it) } to "podcast_${episode.key}"
@@ -231,6 +234,7 @@ class RadioPlaybackService : MediaLibraryService() {
                         MediaSession.MediaItemsWithStartPosition(playlist, selectedIndex, 0L)
                     )
                 }
+                // Station not found in caches — fall through to play just the single item
             }
             
             return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
