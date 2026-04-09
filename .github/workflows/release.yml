@@ -105,3 +105,23 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-to-play-store:
+    needs: [check-version-change, build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download AAB Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-aab
+          path: ./release
+
+      - name: Upload to Google Play Internal Testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.pypyradio.aacplayer
+          releaseFiles: ./release/*.aab
+          track: internal
+          status: completed
+          releaseName: v${{ needs.check-version-change.outputs.version_name }}
