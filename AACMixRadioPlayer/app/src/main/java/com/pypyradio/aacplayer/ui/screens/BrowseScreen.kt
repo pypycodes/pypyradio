@@ -209,74 +209,78 @@ fun BrowseScreen(
     }
     
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                        contentDescription = "pypyradio",
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clickable { onGoAbout() }
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onGoAbout) {
-                        Icon(Icons.Default.Info, contentDescription = "About")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier.padding(padding).fillMaxSize()) {
             
-            // Search bar
-            Surface(
+            // Compact header: Logo + Search bar + About — all in one row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // App logo
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    contentDescription = "pypyradio",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable { onGoAbout() }
+                )
+                
+                // Search bar
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.padding(start = 12.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    TextField(
-                        modifier = Modifier.weight(1f),
-                        value = state.query,
-                        onValueChange = vm::setQuery,
-                        placeholder = { Text("Search stations...") },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 8.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    )
-                    if (state.query.isNotEmpty()) {
-                        IconButton(onClick = { 
-                            vm.setQuery("")
-                            loadCategory(selectedCategory) // Reload current category when cleared
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
-                        }
-                        FilledTonalIconButton(
-                            onClick = { vm.search() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(18.dp))
+                        TextField(
+                            modifier = Modifier.weight(1f),
+                            value = state.query,
+                            onValueChange = vm::setQuery,
+                            placeholder = { Text("Search stations...") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
+                        )
+                        if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { 
+                                vm.setQuery("")
+                                loadCategory(selectedCategory)
+                            }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
+                            }
+                            FilledTonalIconButton(
+                                onClick = { vm.search() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
-                    Spacer(Modifier.width(4.dp))
+                }
+                
+                // About button
+                IconButton(onClick = onGoAbout) {
+                    Icon(Icons.Default.Info, contentDescription = "About")
                 }
             }
             
