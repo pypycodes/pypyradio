@@ -37,7 +37,6 @@ import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 fun PodcastScreen(
     vm: PodcastViewModel = viewModel(),
     player: Player,
-    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by vm.state.collectAsState()
