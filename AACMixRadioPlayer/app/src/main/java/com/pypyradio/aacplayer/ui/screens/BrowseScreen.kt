@@ -117,9 +117,20 @@ fun BrowseScreen(
             }
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                currentPlayingId?.let { failedId ->
-                    vm.markStationFailed(failedId, "Playback failed")
-                    // The service will handle skipping automatically
+                val failedId = currentPlayingId ?: return
+                vm.markStationFailed(failedId, "Playback failed")
+                // If the player queue has >1 item, the service's onPlayerError handles skip.
+                // If only 1 item (user tapped a station that can't play), advance via UI.
+                if (p.mediaItemCount <= 1) {
+                    val failedIdx = displayStations.indexOfFirst { it.stationuuid == failedId }
+                    val nextStation = displayStations.getOrNull(failedIdx + 1)
+                        ?: displayStations.getOrNull(failedIdx - 1) // fallback to prev
+                    if (nextStation != null) {
+                        scope.launch {
+                            delay(400L)
+                            playStation(nextStation)
+                        }
+                    }
                 }
             }
         }
