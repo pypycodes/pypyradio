@@ -29,7 +29,8 @@ data class UiState(
     val failedStationIds: Set<String> = emptySet(),
     val workingStationIds: Set<String> = emptySet(),
     val playbackError: String? = null,
-    val filter: StationFilter = StationFilter.HIDE_FAILED  // Default to hide failed
+    val filter: StationFilter = StationFilter.HIDE_FAILED,
+    val isFilteringStations: Boolean = false  // true while background health check is running
 )
 
 class StationsViewModel(app: Application) : AndroidViewModel(app) {
@@ -261,15 +262,16 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     private fun runBackgroundHealthCheck(stations: List<Station>) = viewModelScope.launch(Dispatchers.IO) {
         if (isCheckingHealth) return@launch
         isCheckingHealth = true
+        withContext(Dispatchers.Main) {
+            _browse.value = _browse.value.copy(isFilteringStations = true)
+        }
         
         try {
-            // Check ALL stations we haven't checked yet
             val uncheckedStations = stations.filter { station ->
                 val id = station.stationuuid
                 !_browse.value.workingStationIds.contains(id) && !_browse.value.failedStationIds.contains(id)
             }
             
-            // Check all unchecked stations
             for (station in uncheckedStations) {
                 try {
                     val isReachable = checkUrlReachable(station.urlResolved)
@@ -285,6 +287,9 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
             }
         } finally {
             isCheckingHealth = false
+            withContext(Dispatchers.Main) {
+                _browse.value = _browse.value.copy(isFilteringStations = false)
+            }
         }
     }
     
