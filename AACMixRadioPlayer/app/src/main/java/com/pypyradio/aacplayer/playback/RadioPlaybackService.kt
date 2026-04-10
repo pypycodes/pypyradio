@@ -248,10 +248,39 @@ class RadioPlaybackService : MediaLibraryService() {
                         )
                     )
                 }
-                // Station not found in caches — fall through to play just the single item
+                // Station not found in any cache — play single item via requestMetadata
             }
-            
-            return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+
+            // Multi-item request (e.g. windowed playlist from BrowseScreen).
+            // MediaController does NOT transmit LocalConfiguration (setUri) over IPC.
+            // We MUST resolve each item's URI here from caches or requestMetadata.
+            // This is what makes next/prev work reliably for browse results.
+            currentPlaylistContext = "browse_active"
+            val resolvedItems = mediaItems.map { item ->
+                val stId = item.mediaId
+                // Try service caches first (exact rebuild with codec info etc.)
+                val cachedStation = ActivePlaylistCache.currentBrowseItems.find { it.stationuuid == stId }
+                    ?: topStations.find { it.stationuuid == stId }
+                    ?: topHindiStations.find { it.stationuuid == stId }
+                    ?: topEnglishStations.find { it.stationuuid == stId }
+                    ?: favoriteStations.find { it.stationuuid == stId }
+
+                if (cachedStation != null) {
+                    playableFromStation(cachedStation, includeUri = true)
+                } else {
+                    // Not in any cache — use requestMetadata URI sent by the UI
+                    val uri = item.requestMetadata.mediaUri
+                    if (uri != null) {
+                        item.buildUpon().setUri(uri).build()
+                    } else {
+                        item // Last resort: return as-is, may fail to play
+                    }
+                }
+            }
+
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
+            )
         }
     }
 
