@@ -23,23 +23,27 @@ jobs:
 
       - name: Check if version changed
         id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get current version info
           CURRENT_VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K\d+' AACMixRadioPlayer/app/build.gradle.kts)
           CURRENT_VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' AACMixRadioPlayer/app/build.gradle.kts)
           
-          # Get previous version info
-          git show HEAD~1:AACMixRadioPlayer/app/build.gradle.kts > /tmp/prev_build.gradle.kts 2>/dev/null || echo "First commit"
-          PREV_VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K\d+' /tmp/prev_build.gradle.kts 2>/dev/null || echo "0")
-          PREV_VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' /tmp/prev_build.gradle.kts 2>/dev/null || echo "0.0.0")
+          # Get latest published release from GitHub
+          LATEST_RELEASE_TAG=$(gh release view --json tagName --jq .tagName 2>/dev/null || echo "v0.0.0")
+          # Strip 'v' prefix
+          LATEST_RELEASE_VERSION=${LATEST_RELEASE_TAG#v}
           
           echo "Current: versionCode=$CURRENT_VERSION_CODE, versionName=$CURRENT_VERSION_NAME"
-          echo "Previous: versionCode=$PREV_VERSION_CODE, versionName=$PREV_VERSION_NAME"
+          echo "Latest Published: tag=$LATEST_RELEASE_TAG, version=$LATEST_RELEASE_VERSION"
           
-          if [ "$CURRENT_VERSION_CODE" != "$PREV_VERSION_CODE" ] || [ "$CURRENT_VERSION_NAME" != "$PREV_VERSION_NAME" ]; then
+          if [ "$CURRENT_VERSION_NAME" != "$LATEST_RELEASE_VERSION" ]; then
             echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "Version differs from latest release. Scheduling build."
           else
             echo "version_changed=false" >> $GITHUB_OUTPUT
+            echo "Version matches latest release. Skipping build."
           fi
           
           echo "version_name=$CURRENT_VERSION_NAME" >> $GITHUB_OUTPUT
