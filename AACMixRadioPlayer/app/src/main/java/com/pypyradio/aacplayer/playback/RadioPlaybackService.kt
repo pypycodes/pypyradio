@@ -532,7 +532,17 @@ class RadioPlaybackService : MediaLibraryService() {
                     .build()
             )
         
-        // Only include URI when actually playing, not for browsing
+        // Always store the URI in RequestMetadata so onAddMediaItems can resolve it
+        // even when the station isn't in the in-memory cache (avoids dropped items on next/prev)
+        if (st.urlResolved.isNotBlank()) {
+            builder.setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(android.net.Uri.parse(st.urlResolved))
+                    .build()
+            )
+        }
+        
+        // Also set the URI directly when playing (not just browsing)
         if (includeUri && st.urlResolved.isNotBlank()) {
             builder.setUri(st.urlResolved)
         }
