@@ -129,21 +129,22 @@ fun BrowseScreen(
         onDispose { player.removeListener(listener) }
     }
     
-    // Play a single station via single-item IPC to avoid TransactionTooLargeException.
-    // The cache is always updated before playback so the service can build the
-    // full next/prev playlist locally without Binder size limits.
+    // Play a station with a windowed playlist for proper next/prev support.
+    // Mirrors the EXACT approach FavoritesScreen uses (which already works):
+    // build MediaItems locally, send via setMediaItems(list, startIndex).
+    // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
         lastPlayTime = now
-        
+
         val url = st.urlResolved
         if (url.isBlank()) {
             vm.markStationFailed(st.stationuuid, "No stream URL")
             scope.launch { snackbarHostState.showSnackbar("Station unavailable", duration = SnackbarDuration.Short) }
             return
         }
-        
+
         // Toggle play/pause if same station
         if (currentPlayingId == st.stationuuid) {
             if (player.isPlaying) {
@@ -156,39 +157,43 @@ fun BrowseScreen(
             }
             return
         }
-        
-        // Sync the cache immediately before play so the service has the correct
-        // ordered (filtered) list to build the queue from for next/prev support.
-        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
-        
+
         try {
-            // Stop + clear first so the service always receives a fresh onSetMediaItems call.
-            // Without this, replacing an existing item may not trigger onSetMediaItems.
+            val selectedIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
+
+            // Build a windowed slice of 25 MediaItems centred on the tapped station
+            val window = 12
+            val fromIndex = maxOf(0, if (selectedIndex >= 0) selectedIndex - window else 0)
+            val toIndex = minOf(displayStations.size, if (selectedIndex >= 0) selectedIndex + window + 1 else displayStations.size)
+            val windowedStations = displayStations.subList(fromIndex, toIndex)
+            val startIndexInWindow = if (selectedIndex >= 0) selectedIndex - fromIndex else 0
+
+            val mediaItems = windowedStations.map { displaySt ->
+                val artUri = displaySt.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+                MediaItem.Builder()
+                    .setMediaId(displaySt.stationuuid)
+                    .setUri(displaySt.urlResolved)
+                    .setRequestMetadata(
+                        MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(android.net.Uri.parse(displaySt.urlResolved))
+                            .build()
+                    )
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(displaySt.name)
+                            .setArtist(displaySt.countryCode ?: "Radio")
+                            .setAlbumTitle(displaySt.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                            .setArtworkUri(artUri)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            }
+
             player.stop()
             player.clearMediaItems()
-            
-            val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(st.stationuuid)
-                .setUri(st.urlResolved)
-                .setRequestMetadata(
-                    MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
-                        .build()
-                )
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(st.name)
-                        .setArtist(st.countryCode ?: "Radio")
-                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                        .setArtworkUri(artworkUri)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                        .setIsPlayable(true)
-                        .build()
-                )
-                .build()
-            
-            player.setMediaItem(mediaItem)
+            player.setMediaItems(mediaItems, startIndexInWindow, 0L)
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
