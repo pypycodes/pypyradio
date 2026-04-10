@@ -51,9 +51,6 @@ class RadioPlaybackService : MediaLibraryService() {
     @Volatile private var currentPlaylistContext: String = MEDIA_ID_TOP
 
     private var retryCount = 0
-    // Tracks how many consecutive stations have been skipped due to failure.
-    // When this reaches mediaItemCount, ALL items in the window have failed — stop cycling.
-    private var consecutiveSkips = 0
     
     // Locks to keep network alive when screen is off
     private var wifiLock: WifiManager.WifiLock? = null
@@ -123,29 +120,66 @@ class RadioPlaybackService : MediaLibraryService() {
                         browsable(MEDIA_ID_FAV, "Favorites"),
                         browsable(MEDIA_ID_PODCASTS, "Podcasts")
                     )
-                    MEDIA_ID_TOP -> topStations.map { playableFromStation(it) }
-                    MEDIA_ID_HINDI -> topHindiStations.map { playableFromStation(it) }
-                    MEDIA_ID_ENGLISH -> topEnglishStations.map { playableFromStation(it) }
-                    MEDIA_ID_FAV -> favoriteStations.map { playableFromStation(it) }
-                    MEDIA_ID_PODCASTS -> trendingPodcasts.map { browsableFromPodcast(it) }
+                    MEDIA_ID_TOP -> {
+                        if (topStations.isEmpty()) {
+                            // Return loading placeholder if data not ready yet
+                            listOf(browsable("loading_top", "Loading stations..."))
+                        } else {
+                            topStations.map { playableFromStation(it) }
+                        }
+                    }
+                    MEDIA_ID_HINDI -> {
+                        if (topHindiStations.isEmpty()) {
+                            listOf(browsable("loading_hindi", "Loading Hindi stations..."))
+                        } else {
+                            topHindiStations.map { playableFromStation(it) }
+                        }
+                    }
+                    MEDIA_ID_ENGLISH -> {
+                        if (topEnglishStations.isEmpty()) {
+                            listOf(browsable("loading_english", "Loading English stations..."))
+                        } else {
+                            topEnglishStations.map { playableFromStation(it) }
+                        }
+                    }
+                    MEDIA_ID_FAV -> {
+                        if (favoriteStations.isEmpty()) {
+                            listOf(browsable("no_favorites", "No favorites yet"))
+                        } else {
+                            favoriteStations.map { playableFromStation(it) }
+                        }
+                    }
+                    MEDIA_ID_PODCASTS -> {
+                        if (trendingPodcasts.isEmpty()) {
+                            listOf(browsable("loading_podcasts", "Loading podcasts..."))
+                        } else {
+                            trendingPodcasts.map { browsableFromPodcast(it) }
+                        }
+                    }
                     else -> {
                         // Check if it's a podcast ID - load episodes
                         if (parentId.startsWith("podcast_")) {
                             val podcastId = parentId.removePrefix("podcast_")
                             // Don't include URI for browsing - only for playback
                             podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it, includeUri = false) } ?: run {
-                                // Load episodes async and return empty for now
+                                // Load episodes async and return loading placeholder
                                 scope.launch(Dispatchers.IO) {
                                     loadPodcastEpisodes(podcastId)
                                 }
-                                emptyList()
+                                listOf(browsable("loading_episodes", "Loading episodes..."))
                             }
                         } else {
                             emptyList()
                         }
                     }
                 }
-                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                // Ensure we never return null or completely empty list for valid parent IDs
+                val resultItems = if (items.isEmpty() && parentId != MEDIA_ID_ROOT) {
+                    listOf(browsable("empty", "No content available"))
+                } else {
+                    items
+                }
+                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(resultItems), params))
             } catch (e: Exception) {
                 Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
             }
@@ -395,27 +429,23 @@ class RadioPlaybackService : MediaLibraryService() {
                             scope.launch {
                                 delay(300L)
                                 retryCount = 0
-                                consecutiveSkips++
-                                if (consecutiveSkips >= mediaItemCount) {
-                                    // All items in the window have failed — stop instead of looping.
-                                    consecutiveSkips = 0
-                                    stop()
-                                } else if (hasNextMediaItem()) {
+                                if (hasNextMediaItem()) {
                                     seekToNextMediaItem()
                                     prepare()
                                     play()
-                                } else {
+                                } else if (mediaItemCount > 1) {
+                                    // Loop back to first item
                                     seekTo(0, 0L)
                                     prepare()
                                     play()
                                 }
+                                // Don't stop - allow continuous cycling through failed stations
                             }
                         }
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                         retryCount = 0
-                        consecutiveSkips = 0  // Reset on any successful/intentional transition
                         mediaItem?.mediaId?.takeIf { it.isNotBlank() }?.let { id ->
                             scope.launch(Dispatchers.IO) { repo.pingClick(id) }
                         }
@@ -431,20 +461,17 @@ class RadioPlaybackService : MediaLibraryService() {
                                 scope.launch {
                                     delay(300L)
                                     retryCount = 0
-                                    consecutiveSkips++
-                                    if (consecutiveSkips >= mediaItemCount) {
-                                        // All items in the window have failed — stop cycling.
-                                        consecutiveSkips = 0
-                                        stop()
-                                    } else if (hasNextMediaItem()) {
+                                    if (hasNextMediaItem()) {
                                         seekToNextMediaItem()
                                         prepare()
                                         play()
                                     } else if (mediaItemCount > 1) {
+                                        // Loop back to first item
                                         seekTo(0, 0L)
                                         prepare()
                                         play()
                                     }
+                                    // Don't stop - allow continuous cycling through failed stations
                                 }
                             }
                         }
@@ -462,25 +489,59 @@ class RadioPlaybackService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .build()
 
-        // Async prefetch top stations and podcasts for Android Auto browsing
+        // Load initial data synchronously for Android Auto to prevent blank screen
         scope.launch(Dispatchers.IO) {
-            topStations = repo.topVotedAac(120)
-            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_TOP, topStations.size, null) }
+            try {
+                // Load essential data immediately
+                topStations = repo.topVotedAac(50) // Smaller initial load
+                withContext(Dispatchers.Main) {
+                    session?.notifyChildrenChanged(MEDIA_ID_TOP, topStations.size, null)
+                }
+                
+                // Load rest of data
+                launch(Dispatchers.IO) {
+                    val moreStations = repo.topVotedAac(120)
+                    topStations = moreStations
+                    withContext(Dispatchers.Main) {
+                        session?.notifyChildrenChanged(MEDIA_ID_TOP, topStations.size, null)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RadioService", "Failed to load top stations", e)
+            }
         }
         
         scope.launch(Dispatchers.IO) {
-            topHindiStations = repo.searchByLanguage("hindi", 100)
-            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_HINDI, topHindiStations.size, null) }
+            try {
+                topHindiStations = repo.searchByLanguage("hindi", 50)
+                withContext(Dispatchers.Main) {
+                    session?.notifyChildrenChanged(MEDIA_ID_HINDI, topHindiStations.size, null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RadioService", "Failed to load Hindi stations", e)
+            }
         }
         
         scope.launch(Dispatchers.IO) {
-            topEnglishStations = repo.searchByLanguage("english", 100)
-            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_ENGLISH, topEnglishStations.size, null) }
+            try {
+                topEnglishStations = repo.searchByLanguage("english", 50)
+                withContext(Dispatchers.Main) {
+                    session?.notifyChildrenChanged(MEDIA_ID_ENGLISH, topEnglishStations.size, null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RadioService", "Failed to load English stations", e)
+            }
         }
         
         scope.launch(Dispatchers.IO) {
-            trendingPodcasts = podcastRepo.getTrendingPodcasts(50)
-            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_PODCASTS, trendingPodcasts.size, null) }
+            try {
+                trendingPodcasts = podcastRepo.getTrendingPodcasts(30)
+                withContext(Dispatchers.Main) {
+                    session?.notifyChildrenChanged(MEDIA_ID_PODCASTS, trendingPodcasts.size, null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RadioService", "Failed to load podcasts", e)
+            }
         }
 
         // Keep favorites updated

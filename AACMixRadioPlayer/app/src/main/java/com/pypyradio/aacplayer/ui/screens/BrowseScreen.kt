@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,6 +73,7 @@ fun BrowseScreen(
     vm: StationsViewModel,
     player: Player,
     onGoAbout: () -> Unit = {},
+    onGoPodcasts: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {
@@ -326,6 +329,25 @@ fun BrowseScreen(
                             }
                         }
                     }
+                }
+                
+                // About and Podcast buttons
+                IconButton(onClick = onGoAbout) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "About",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = onGoPodcasts,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Podcasts,
+                        contentDescription = "Podcasts",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
             
