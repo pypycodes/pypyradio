@@ -27,6 +27,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
@@ -338,11 +344,47 @@ fun BrowseScreen(
                 }
             }
             
-            
             LaunchedEffect(displayStations) {
                 com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
             }
-            
+
+            // Filtering banner — visible while background health check is pruning dead stations
+            AnimatedVisibility(
+                visible = state.isFilteringStations,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.width(20.dp).height(2.dp),
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Text(
+                            "Scanning stations for playability…",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(Modifier.weight(1f))
+                        if (state.failedStationIds.isNotEmpty()) {
+                            Text(
+                                "${state.failedStationIds.size} removed",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Station count and current category label
             if (!state.loading && state.error == null && displayStations.isNotEmpty()) {
                 val categoryLabel = if (state.query.isNotEmpty()) {
