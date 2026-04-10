@@ -232,8 +232,18 @@ class RadioPlaybackService : MediaLibraryService() {
                 currentPlaylistContext = context
                 val selectedIndex = playlist.indexOfFirst { it.mediaId == id }
                 if (selectedIndex >= 0 && playlist.isNotEmpty()) {
+                    // Prevent TransactionTooLargeException over IPC by returning a windowed subset
+                    // 100 items is plenty for Next/Prev functionality without blowing up the Binder limit
+                    val startIndexInSublist = kotlin.math.max(0, selectedIndex - 50)
+                    val endIndexInSublist = kotlin.math.min(playlist.size, selectedIndex + 50)
+                    val windowedPlaylist = playlist.subList(startIndexInSublist, endIndexInSublist)
+                    
                     return Futures.immediateFuture(
-                        MediaSession.MediaItemsWithStartPosition(playlist, selectedIndex, 0L)
+                        MediaSession.MediaItemsWithStartPosition(
+                            windowedPlaylist, 
+                            selectedIndex - startIndexInSublist, 
+                            0L
+                        )
                     )
                 }
                 // Station not found in caches — fall through to play just the single item
