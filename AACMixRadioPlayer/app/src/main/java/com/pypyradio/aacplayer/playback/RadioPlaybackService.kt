@@ -51,6 +51,9 @@ class RadioPlaybackService : MediaLibraryService() {
     @Volatile private var currentPlaylistContext: String = MEDIA_ID_TOP
 
     private var retryCount = 0
+    // Tracks how many consecutive stations have been skipped due to failure.
+    // When this reaches mediaItemCount, ALL items in the window have failed — stop cycling.
+    private var consecutiveSkips = 0
     
     // Locks to keep network alive when screen is off
     private var wifiLock: WifiManager.WifiLock? = null
@@ -392,23 +395,27 @@ class RadioPlaybackService : MediaLibraryService() {
                             scope.launch {
                                 delay(300L)
                                 retryCount = 0
-                                if (hasNextMediaItem()) {
+                                consecutiveSkips++
+                                if (consecutiveSkips >= mediaItemCount) {
+                                    // All items in the window have failed — stop instead of looping.
+                                    consecutiveSkips = 0
+                                    stop()
+                                } else if (hasNextMediaItem()) {
                                     seekToNextMediaItem()
                                     prepare()
                                     play()
-                                } else if (hasPreviousMediaItem()) {
-                                    // Wrapped - try first item
+                                } else {
                                     seekTo(0, 0L)
                                     prepare()
                                     play()
                                 }
-                                // else: only 1 item in queue, UI handles via onStationFailed callback
                             }
                         }
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                         retryCount = 0
+                        consecutiveSkips = 0  // Reset on any successful/intentional transition
                         mediaItem?.mediaId?.takeIf { it.isNotBlank() }?.let { id ->
                             scope.launch(Dispatchers.IO) { repo.pingClick(id) }
                         }
@@ -424,7 +431,12 @@ class RadioPlaybackService : MediaLibraryService() {
                                 scope.launch {
                                     delay(300L)
                                     retryCount = 0
-                                    if (hasNextMediaItem()) {
+                                    consecutiveSkips++
+                                    if (consecutiveSkips >= mediaItemCount) {
+                                        // All items in the window have failed — stop cycling.
+                                        consecutiveSkips = 0
+                                        stop()
+                                    } else if (hasNextMediaItem()) {
                                         seekToNextMediaItem()
                                         prepare()
                                         play()

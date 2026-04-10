@@ -143,7 +143,8 @@ fun BrowseScreen(
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
         val now = System.currentTimeMillis()
-        if (now - lastPlayTime < 500) return
+        // 100ms debounce: prevent accidental double-tap, but don't block quick station switching
+        if (now - lastPlayTime < 100) return
         lastPlayTime = now
 
         val url = st.urlResolved
@@ -158,9 +159,7 @@ fun BrowseScreen(
             if (player.isPlaying) {
                 player.pause()
             } else {
-                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                    player.prepare()
-                }
+                player.prepare()
                 player.play()
             }
             return
@@ -169,12 +168,23 @@ fun BrowseScreen(
         try {
             val selectedIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
 
-            // Build a windowed slice of 25 MediaItems centred on the tapped station
-            val window = 12
-            val fromIndex = maxOf(0, if (selectedIndex >= 0) selectedIndex - window else 0)
-            val toIndex = minOf(displayStations.size, if (selectedIndex >= 0) selectedIndex + window + 1 else displayStations.size)
-            val windowedStations = displayStations.subList(fromIndex, toIndex)
-            val startIndexInWindow = if (selectedIndex >= 0) selectedIndex - fromIndex else 0
+            // Build windowed slice centred on the tapped station.
+            // If selectedIndex == -1 (health check removed station just as user tapped it),
+            // play the station standalone — never default to index 0 which plays the wrong station.
+            val windowedStations: List<Station>
+            val startIndexInWindow: Int
+            if (selectedIndex >= 0) {
+                val window = 12
+                val fromIndex = maxOf(0, selectedIndex - window)
+                val toIndex = minOf(displayStations.size, selectedIndex + window + 1)
+                windowedStations = displayStations.subList(fromIndex, toIndex)
+                startIndexInWindow = selectedIndex - fromIndex
+            } else {
+                // Station was just removed from displayStations (timing race with health check).
+                // Play it as a standalone item so the mini player shows the correct station.
+                windowedStations = listOf(st)
+                startIndexInWindow = 0
+            }
 
             val mediaItems = windowedStations.map { displaySt ->
                 val artUri = displaySt.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
