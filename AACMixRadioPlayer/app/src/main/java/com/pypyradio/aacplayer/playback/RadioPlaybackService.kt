@@ -20,6 +20,7 @@ import com.pypyradio.aacplayer.MainActivity
 import com.pypyradio.aacplayer.data.db.AppDatabase
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
+import com.pypyradio.aacplayer.data.model.PodcastSource
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
@@ -112,47 +113,126 @@ class RadioPlaybackService : MediaLibraryService() {
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             return try {
+                android.util.Log.d("RadioService", "onGetChildren called for parentId: $parentId")
+                
                 val items = when (parentId) {
-                    MEDIA_ID_ROOT -> listOf(
-                        browsable(MEDIA_ID_TOP, "Top Stations"),
-                        browsable(MEDIA_ID_HINDI, "Top Hindi"),
-                        browsable(MEDIA_ID_ENGLISH, "Top English"),
-                        browsable(MEDIA_ID_FAV, "Favorites"),
-                        browsable(MEDIA_ID_PODCASTS, "Podcasts")
-                    )
+                    MEDIA_ID_ROOT -> {
+                        val rootItems = listOf(
+                            browsable(MEDIA_ID_TOP, "Top Stations"),
+                            browsable(MEDIA_ID_HINDI, "Top Hindi"),
+                            browsable(MEDIA_ID_ENGLISH, "Top English"),
+                            browsable(MEDIA_ID_FAV, "Favorites"),
+                            browsable(MEDIA_ID_PODCASTS, "Podcasts")
+                        )
+                        android.util.Log.d("RadioService", "ROOT items: ${rootItems.size}")
+                        rootItems
+                    }
                     MEDIA_ID_TOP -> {
                         if (topStations.isEmpty()) {
-                            // Return loading placeholder if data not ready yet
-                            listOf(browsable("loading_top", "Loading stations..."))
+                            android.util.Log.d("RadioService", "TOP stations empty, creating placeholder")
+                            // Create a dummy station to ensure Android Auto gets something
+                            val dummyStation = Station(
+                                stationuuid = "dummy_top",
+                                name = "Loading...",
+                                urlResolved = "",
+                                homepage = null,
+                                favicon = null,
+                                tags = null,
+                                countryCode = null,
+                                language = null,
+                                codec = null,
+                                bitrate = null,
+                                lastCheckOk = null
+                            )
+                            listOf(playableFromStation(dummyStation))
                         } else {
+                            android.util.Log.d("RadioService", "TOP stations: ${topStations.size}")
                             topStations.map { playableFromStation(it) }
                         }
                     }
                     MEDIA_ID_HINDI -> {
                         if (topHindiStations.isEmpty()) {
-                            listOf(browsable("loading_hindi", "Loading Hindi stations..."))
+                            android.util.Log.d("RadioService", "HINDI stations empty, creating placeholder")
+                            val dummyStation = Station(
+                                stationuuid = "dummy_hindi",
+                                name = "Loading Hindi...",
+                                urlResolved = "",
+                                homepage = null,
+                                favicon = null,
+                                tags = null,
+                                countryCode = null,
+                                language = null,
+                                codec = null,
+                                bitrate = null,
+                                lastCheckOk = null
+                            )
+                            listOf(playableFromStation(dummyStation))
                         } else {
+                            android.util.Log.d("RadioService", "HINDI stations: ${topHindiStations.size}")
                             topHindiStations.map { playableFromStation(it) }
                         }
                     }
                     MEDIA_ID_ENGLISH -> {
                         if (topEnglishStations.isEmpty()) {
-                            listOf(browsable("loading_english", "Loading English stations..."))
+                            android.util.Log.d("RadioService", "ENGLISH stations empty, creating placeholder")
+                            val dummyStation = Station(
+                                stationuuid = "dummy_english",
+                                name = "Loading English...",
+                                urlResolved = "",
+                                homepage = null,
+                                favicon = null,
+                                tags = null,
+                                countryCode = null,
+                                language = null,
+                                codec = null,
+                                bitrate = null,
+                                lastCheckOk = null
+                            )
+                            listOf(playableFromStation(dummyStation))
                         } else {
+                            android.util.Log.d("RadioService", "ENGLISH stations: ${topEnglishStations.size}")
                             topEnglishStations.map { playableFromStation(it) }
                         }
                     }
                     MEDIA_ID_FAV -> {
                         if (favoriteStations.isEmpty()) {
-                            listOf(browsable("no_favorites", "No favorites yet"))
+                            android.util.Log.d("RadioService", "FAVORITES empty, creating placeholder")
+                            val dummyStation = Station(
+                                stationuuid = "dummy_fav",
+                                name = "No favorites yet",
+                                urlResolved = "",
+                                homepage = null,
+                                favicon = null,
+                                tags = null,
+                                countryCode = null,
+                                language = null,
+                                codec = null,
+                                bitrate = null,
+                                lastCheckOk = null
+                            )
+                            listOf(playableFromStation(dummyStation))
                         } else {
+                            android.util.Log.d("RadioService", "FAVORITES: ${favoriteStations.size}")
                             favoriteStations.map { playableFromStation(it) }
                         }
                     }
                     MEDIA_ID_PODCASTS -> {
                         if (trendingPodcasts.isEmpty()) {
-                            listOf(browsable("loading_podcasts", "Loading podcasts..."))
+                            android.util.Log.d("RadioService", "PODCASTS empty, creating placeholder")
+                            val dummyPodcast = Podcast(
+                                id = "dummy_podcast",
+                                title = "Loading podcasts...",
+                                author = null,
+                                description = null,
+                                imageUrl = null,
+                                feedUrl = null,
+                                genre = null,
+                                episodeCount = null,
+                                source = PodcastSource.PODCAST_INDEX
+                            )
+                            listOf(browsableFromPodcast(dummyPodcast))
                         } else {
+                            android.util.Log.d("RadioService", "PODCASTS: ${trendingPodcasts.size}")
                             trendingPodcasts.map { browsableFromPodcast(it) }
                         }
                     }
@@ -160,28 +240,75 @@ class RadioPlaybackService : MediaLibraryService() {
                         // Check if it's a podcast ID - load episodes
                         if (parentId.startsWith("podcast_")) {
                             val podcastId = parentId.removePrefix("podcast_")
-                            // Don't include URI for browsing - only for playback
+                            android.util.Log.d("RadioService", "Loading episodes for podcast: $podcastId")
                             podcastEpisodesCache[podcastId]?.map { playableFromEpisode(it, includeUri = false) } ?: run {
-                                // Load episodes async and return loading placeholder
+                                // Load episodes async and return placeholder
                                 scope.launch(Dispatchers.IO) {
                                     loadPodcastEpisodes(podcastId)
                                 }
-                                listOf(browsable("loading_episodes", "Loading episodes..."))
+                                val dummyEpisode = PodcastEpisode(
+                                    id = "dummy_episode",
+                                    title = "Loading episodes...",
+                                    podcastId = podcastId,
+                                    podcastTitle = null,
+                                    author = null,
+                                    description = null,
+                                    audioUrl = "",
+                                    imageUrl = null,
+                                    durationMs = null,
+                                    publishedDate = null,
+                                    source = PodcastSource.PODCAST_INDEX
+                                )
+                                listOf(playableFromEpisode(dummyEpisode, includeUri = false))
                             }
                         } else {
+                            android.util.Log.w("RadioService", "Unknown parentId: $parentId")
                             emptyList()
                         }
                     }
                 }
+                
                 // Ensure we never return null or completely empty list for valid parent IDs
                 val resultItems = if (items.isEmpty() && parentId != MEDIA_ID_ROOT) {
-                    listOf(browsable("empty", "No content available"))
+                    android.util.Log.w("RadioService", "No items for $parentId, creating fallback")
+                    val fallbackStation = Station(
+                        stationuuid = "fallback",
+                        name = "No content available",
+                        urlResolved = "",
+                        homepage = null,
+                        favicon = null,
+                        tags = null,
+                        countryCode = null,
+                        language = null,
+                        codec = null,
+                        bitrate = null,
+                        lastCheckOk = null
+                    )
+                    listOf(playableFromStation(fallbackStation))
                 } else {
                     items
                 }
+                
+                android.util.Log.d("RadioService", "Returning ${resultItems.size} items for $parentId")
                 Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(resultItems), params))
             } catch (e: Exception) {
-                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                android.util.Log.e("RadioService", "Error in onGetChildren for $parentId", e)
+                // Return a fallback item even on error
+                val fallbackStation = Station(
+                    stationuuid = "error_fallback",
+                    name = "Error loading content",
+                    urlResolved = "",
+                    homepage = null,
+                    favicon = null,
+                    tags = null,
+                    countryCode = null,
+                    language = null,
+                    codec = null,
+                    bitrate = null,
+                    lastCheckOk = null
+                )
+                val fallbackItem = playableFromStation(fallbackStation)
+                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(fallbackItem), params))
             }
         }
 
@@ -485,9 +612,23 @@ class RadioPlaybackService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        session = MediaLibrarySession.Builder(this, player!!, callback)
-            .setSessionActivity(pendingIntent)
-            .build()
+        try {
+            android.util.Log.d("RadioService", "Creating MediaLibrarySession")
+            session = MediaLibrarySession.Builder(this, player!!, callback)
+                .setSessionActivity(pendingIntent)
+                .build()
+            android.util.Log.d("RadioService", "MediaLibrarySession created successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("RadioService", "Failed to create MediaLibrarySession", e)
+            // Try to create a minimal session as fallback
+            try {
+                session = MediaLibrarySession.Builder(this, player!!, callback).build()
+                android.util.Log.d("RadioService", "Fallback MediaLibrarySession created")
+            } catch (e2: Exception) {
+                android.util.Log.e("RadioService", "Failed to create fallback session", e2)
+                // Continue without session - at least the service won't crash
+            }
+        }
 
         // Load initial data synchronously for Android Auto to prevent blank screen
         scope.launch(Dispatchers.IO) {
