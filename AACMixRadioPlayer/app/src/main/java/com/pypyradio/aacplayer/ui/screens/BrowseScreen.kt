@@ -84,6 +84,8 @@ fun BrowseScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
+    // Triggers UI-side auto-advance when service can't skip (single-item queue)
+    var autoAdvanceFromId by remember { mutableStateOf<String?>(null) }
     
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
@@ -119,18 +121,9 @@ fun BrowseScreen(
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val failedId = currentPlayingId ?: return
                 vm.markStationFailed(failedId, "Playback failed")
-                // If the player queue has >1 item, the service's onPlayerError handles skip.
-                // If only 1 item (user tapped a station that can't play), advance via UI.
-                if (p.mediaItemCount <= 1) {
-                    val failedIdx = displayStations.indexOfFirst { it.stationuuid == failedId }
-                    val nextStation = displayStations.getOrNull(failedIdx + 1)
-                        ?: displayStations.getOrNull(failedIdx - 1) // fallback to prev
-                    if (nextStation != null) {
-                        scope.launch {
-                            delay(400L)
-                            playStation(nextStation)
-                        }
-                    }
+                // If queue has only 1 item, service can't auto-skip — signal UI to advance
+                if (player.mediaItemCount <= 1) {
+                    autoAdvanceFromId = failedId
                 }
             }
         }
@@ -241,6 +234,17 @@ fun BrowseScreen(
     // Load initial stations
     LaunchedEffect(Unit) {
         vm.loadTop()
+    }
+
+    // Auto-advance when a tapped station fails and the queue has only 1 item
+    LaunchedEffect(autoAdvanceFromId) {
+        val fromId = autoAdvanceFromId ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(400L)
+        val failedIdx = displayStations.indexOfFirst { it.stationuuid == fromId }
+        val nextStation = displayStations.getOrNull(failedIdx + 1)
+            ?: displayStations.getOrNull(failedIdx - 1)
+        nextStation?.let { playStation(it) }
+        autoAdvanceFromId = null
     }
     
     Scaffold(
