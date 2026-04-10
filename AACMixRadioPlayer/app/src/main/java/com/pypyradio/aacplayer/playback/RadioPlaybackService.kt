@@ -206,6 +206,8 @@ class RadioPlaybackService : MediaLibraryService() {
             if (mediaItems.size == 1 && id != null) {
                 // Find which cached list contains this station and build full playlist
                 val (playlist, context) = when {
+                    ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == id } -> 
+                        ActivePlaylistCache.currentBrowseItems.map { playableFromStation(it, includeUri = true) } to "browse_active"
                     topHindiStations.any { it.stationuuid == id } -> 
                         topHindiStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_HINDI
                     topEnglishStations.any { it.stationuuid == id } -> 
