@@ -162,6 +162,11 @@ fun BrowseScreen(
         com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
         
         try {
+            // Stop + clear first so the service always receives a fresh onSetMediaItems call.
+            // Without this, replacing an existing item may not trigger onSetMediaItems.
+            player.stop()
+            player.clearMediaItems()
+            
             val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
             val mediaItem = MediaItem.Builder()
                 .setMediaId(st.stationuuid)
