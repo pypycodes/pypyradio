@@ -87,6 +87,13 @@ fun BrowseScreen(
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
     
+    // Hide failed stations
+    val displayStations = remember(state.stations, state.failedStationIds) {
+        state.stations.filter { 
+            it.urlResolved.isNotBlank() && !state.failedStationIds.contains(it.stationuuid)
+        }
+    }
+    
     // Listen to player state
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -333,12 +340,6 @@ fun BrowseScreen(
                 }
             }
             
-            // Hide failed stations
-            val displayStations = remember(state.stations, state.failedStationIds) {
-                state.stations.filter { 
-                    it.urlResolved.isNotBlank() && !state.failedStationIds.contains(it.stationuuid)
-                }
-            }
             
             LaunchedEffect(displayStations) {
                 com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
