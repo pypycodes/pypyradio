@@ -156,34 +156,39 @@ fun BrowseScreen(
         try {
             player.stop()
             player.clearMediaItems()
-            
-            // Build a single MediaItem with requestMetadata containing the stream URI.
-            // The service resolves this in onAddMediaItems and can expand it to a
-            // playlist in onSetMediaItems for next/prev support.
-            val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let {
-                android.net.Uri.parse(it)
+            // Build a list of simple MediaItems for the entire active view
+            val itemsToPlay = displayStations.map { displaySt ->
+                val artUri = displaySt.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+                MediaItem.Builder()
+                    .setMediaId(displaySt.stationuuid)
+                    .setUri(displaySt.urlResolved)
+                    .setRequestMetadata(
+                        MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(android.net.Uri.parse(displaySt.urlResolved))
+                            .build()
+                    )
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(displaySt.name)
+                            .setArtist(displaySt.countryCode ?: "Radio")
+                            .setAlbumTitle(displaySt.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                            .setArtworkUri(artUri)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
             }
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(st.stationuuid)
-                .setUri(st.urlResolved)
-                .setRequestMetadata(
-                    MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
-                        .build()
-                )
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(st.name)
-                        .setArtist(st.countryCode ?: "Radio")
-                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                        .setArtworkUri(artworkUri)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                        .setIsPlayable(true)
-                        .build()
-                )
-                .build()
             
-            player.setMediaItem(mediaItem)
+            val startIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
+            if (startIndex >= 0 && itemsToPlay.isNotEmpty()) {
+                player.setMediaItems(itemsToPlay, startIndex, 0L)
+            } else {
+                // Fallback to single item if not found
+                val fallbackItem = itemsToPlay.find { it.mediaId == st.stationuuid }
+                if (fallbackItem != null) player.setMediaItem(fallbackItem)
+            }
+            
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
