@@ -45,7 +45,7 @@ fun SimpleNowPlayingBar(
     var errorCount by remember { mutableStateOf(0) }
     var hasNext by remember { mutableStateOf(false) }
     var hasPrevious by remember { mutableStateOf(false) }
-    val maxAutoRetries = 5
+    val maxAutoRetries = 1  // Service handles real retries; UI just shows one reconnecting pulse
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {

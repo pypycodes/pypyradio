@@ -206,8 +206,10 @@ class RadioPlaybackService : MediaLibraryService() {
             if (mediaItems.size == 1 && id != null) {
                 // Find which cached list contains this station and build full playlist
                 val (playlist, context) = when {
-                    ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == id } -> 
+                    ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == id } -> {
+                        android.util.Log.d("RadioService", "Cache HIT browse_active for $id (${ActivePlaylistCache.currentBrowseItems.size} items)")
                         ActivePlaylistCache.currentBrowseItems.map { playableFromStation(it, includeUri = true) } to "browse_active"
+                    }
                     topHindiStations.any { it.stationuuid == id } -> 
                         topHindiStations.map { playableFromStation(it, includeUri = true) } to MEDIA_ID_HINDI
                     topEnglishStations.any { it.stationuuid == id } -> 
@@ -224,6 +226,7 @@ class RadioPlaybackService : MediaLibraryService() {
                         if (episode != null) {
                             episode.value.map { playableFromEpisode(it) } to "podcast_${episode.key}"
                         } else {
+                            android.util.Log.w("RadioService", "Cache MISS for $id — browse cache size=${ActivePlaylistCache.currentBrowseItems.size}")
                             emptyList<MediaItem>() to MEDIA_ID_TOP
                         }
                     }
@@ -232,11 +235,10 @@ class RadioPlaybackService : MediaLibraryService() {
                 currentPlaylistContext = context
                 val selectedIndex = playlist.indexOfFirst { it.mediaId == id }
                 if (selectedIndex >= 0 && playlist.isNotEmpty()) {
-                    // Prevent TransactionTooLargeException over IPC by returning a windowed subset
-                    // 100 items is plenty for Next/Prev functionality without blowing up the Binder limit
                     val startIndexInSublist = kotlin.math.max(0, selectedIndex - 50)
                     val endIndexInSublist = kotlin.math.min(playlist.size, selectedIndex + 50)
                     val windowedPlaylist = playlist.subList(startIndexInSublist, endIndexInSublist)
+                    android.util.Log.d("RadioService", "Returning ${windowedPlaylist.size} items, startIndex=${selectedIndex - startIndexInSublist}")
                     
                     return Futures.immediateFuture(
                         MediaSession.MediaItemsWithStartPosition(
@@ -349,38 +351,39 @@ class RadioPlaybackService : MediaLibraryService() {
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED
                         
-                        // Buffer for max 3 retries (progressive backoff) before auto-skipping.
-                        // This allows up to ~12 seconds of recovery time for cellular dead zones
-                        // without making the player feel permanently frozen.
-                        val maxRetryForError = if (isNetworkError) 3 else maxRetries
+                        // Buffer for max 2 retries before auto-skipping.
+                        val maxRetryForError = if (isNetworkError) 2 else maxRetries
                         
                         if (retryCount < maxRetryForError && currentMediaItem != null) {
                             val waitMs = when (retryCount) {
-                                0 -> 2000L // 2 sec initial buffer
-                                1 -> 4000L // 4 sec secondary buffer
+                                0 -> 3000L // 3 sec initial buffer
                                 else -> 6000L // 6 sec final effort
                             }
                             retryCount++
                             scope.launch {
                                 delay(waitMs)
-                                // Reset and prepare fresh for better recovery
                                 stop()
                                 prepare()
                                 play()
                             }
-                        } else if (mediaItemCount > 1) {
-                            // Auto-skip to next station if retries exhausted
+                        } else {
+                            // Retries exhausted — always skip regardless of queue size.
+                            // If the queue has >1 item, move to the next station.
+                            // If only 1 item (cache miss), the UI layer will handle removal.
                             scope.launch {
-                                delay(500L)
+                                delay(300L)
                                 retryCount = 0
-                                if (hasNextMediaItem()) {
-                                    seekToNextMediaItem()
-                                } else {
-                                    // Loop back to first station
-                                    seekTo(0, 0L)
+                                if (mediaItemCount > 1) {
+                                    if (hasNextMediaItem()) {
+                                        seekToNextMediaItem()
+                                    } else {
+                                        seekTo(0, 0L)
+                                    }
+                                    prepare()
+                                    play()
                                 }
-                                prepare()
-                                play()
+                                // For single-item case: stop cleanly so UI shows stopped state
+                                // (the UI's onPlayerError will mark it failed and hide it)
                             }
                         }
                     }
