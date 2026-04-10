@@ -153,36 +153,32 @@ class RadioPlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
-            // Resolve media items for Android Auto playback - include URIs for actual playback
-            val resolvedItems = mediaItems.mapNotNull { requestedItem ->
+            // IMPORTANT: use map (not mapNotNull) so list size is NEVER changed.
+            // Dropping items shifts indices and breaks startIndex, causing wrong station to play.
+            val resolvedItems = mediaItems.map { requestedItem ->
                 val mediaId = requestedItem.mediaId
-                // Check if it's a podcast episode
+                // Podcast episode
                 if (mediaId.startsWith("episode_")) {
                     val episodeId = mediaId.removePrefix("episode_")
                     val ep = podcastEpisodesCache.values.flatten().find { it.id == episodeId }
-                    if (ep != null) return@mapNotNull playableFromEpisode(ep)
+                    if (ep != null) return@map playableFromEpisode(ep)
                 } else {
-                    // Find station in our lists and include URI for playback
                     val station = topStations.find { it.stationuuid == mediaId }
                         ?: topHindiStations.find { it.stationuuid == mediaId }
                         ?: topEnglishStations.find { it.stationuuid == mediaId }
                         ?: favoriteStations.find { it.stationuuid == mediaId }
-                    if (station != null) return@mapNotNull playableFromStation(station, includeUri = true)
+                        ?: ActivePlaylistCache.currentBrowseItems.find { it.stationuuid == mediaId }
+                    if (station != null) return@map playableFromStation(station, includeUri = true)
                 }
-                
-                // If not found in caches but controller provided a requestMetadata with mediaUri
-                if (requestedItem.requestMetadata.mediaUri != null) {
-                    return@mapNotNull requestedItem.buildUpon()
-                        .setUri(requestedItem.requestMetadata.mediaUri)
-                        .build()
+                // Fallback: URI already in requestMetadata (set by BrowseScreen/FavoritesScreen)
+                val uri = requestedItem.requestMetadata.mediaUri
+                if (uri != null) {
+                    return@map requestedItem.buildUpon().setUri(uri).build()
                 }
-                
-                null
+                // Last resort: return item as-is (may fail to play but list size preserved)
+                requestedItem
             }.toMutableList()
-            
-            return Futures.immediateFuture(
-                if (resolvedItems.isNotEmpty()) resolvedItems else mediaItems
-            )
+            return Futures.immediateFuture(resolvedItems)
         }
 
         override fun onSetMediaItems(
@@ -396,23 +392,21 @@ class RadioPlaybackService : MediaLibraryService() {
                                 play()
                             }
                         } else {
-                            // Retries exhausted — always skip regardless of queue size.
-                            // If the queue has >1 item, move to the next station.
-                            // If only 1 item (cache miss), the UI layer will handle removal.
+                            // Retries exhausted — skip to next station in the queue.
                             scope.launch {
                                 delay(300L)
                                 retryCount = 0
-                                if (mediaItemCount > 1) {
-                                    if (hasNextMediaItem()) {
-                                        seekToNextMediaItem()
-                                    } else {
-                                        seekTo(0, 0L)
-                                    }
+                                if (hasNextMediaItem()) {
+                                    seekToNextMediaItem()
+                                    prepare()
+                                    play()
+                                } else if (hasPreviousMediaItem()) {
+                                    // Wrapped - try first item
+                                    seekTo(0, 0L)
                                     prepare()
                                     play()
                                 }
-                                // For single-item case: stop cleanly so UI shows stopped state
-                                // (the UI's onPlayerError will mark it failed and hide it)
+                                // else: only 1 item in queue, UI handles via onStationFailed callback
                             }
                         }
                     }
