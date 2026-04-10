@@ -118,9 +118,13 @@ jobs:
           path: ./release
 
       - name: Create Release Notes
+        env:
+          VERSION_NAME: ${{ needs.check-version-change.outputs.version_name }}
+          VERSION_CODE: ${{ needs.check-version-change.outputs.version_code }}
         run: |
           mkdir -p whatsnew
-          echo "Bug Fixes and Improvements" > whatsnew/whatsnew-en-US
+          printf 'Version %s (Build %s)\n\nBug fixes and stability improvements.\n' \
+            "$VERSION_NAME" "$VERSION_CODE" > whatsnew/whatsnew-en-US
 
       - name: Upload to Google Play Internal Testing
         uses: r0adkll/upload-google-play@v1
