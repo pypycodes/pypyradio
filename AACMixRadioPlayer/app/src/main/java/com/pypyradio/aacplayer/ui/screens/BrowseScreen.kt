@@ -338,11 +338,15 @@ fun BrowseScreen(
                 }
             }
             
-            // Hide failed stations from the list so the user only sees playable ones
-            val displayStations = remember(state.stations, state.failedStationIds) {
+            // Do not hide failed stations, keeping them visible so the yellow warning mark is seen
+            val displayStations = remember(state.stations) {
                 state.stations.filter { 
-                    !state.failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank()
+                    it.urlResolved.isNotBlank()
                 }
+            }
+            
+            LaunchedEffect(displayStations) {
+                com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
             }
             
             // Station count and current category label

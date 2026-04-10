@@ -235,6 +235,26 @@ fun SimpleNowPlayingBar(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Previous
+                    IconButton(
+                        onClick = { 
+                            player.seekToPreviousMediaItem()
+                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                                player.prepare()
+                            }
+                            player.play()
+                        },
+                        enabled = hasPrevious,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SkipPrevious, 
+                            contentDescription = "Previous",
+                            modifier = Modifier.size(28.dp),
+                            tint = if (hasPrevious) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    }
+
                     // Play/Pause - large and prominent
                     FilledIconButton(
                         onClick = {
