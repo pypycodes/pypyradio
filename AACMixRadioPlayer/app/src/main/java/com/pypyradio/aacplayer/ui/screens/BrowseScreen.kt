@@ -291,6 +291,7 @@ fun BrowseScreen(
                             }
                         }
                     }
+                }
             }
             
             // Category chips - horizontal scrollable row
