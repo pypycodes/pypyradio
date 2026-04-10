@@ -376,17 +376,13 @@ class RadioPlaybackService : MediaLibraryService() {
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED
                         
-                        // Buffer for max 2 retries before auto-skipping.
-                        val maxRetryForError = if (isNetworkError) 2 else maxRetries
+                        // Buffer for 1 retry before auto-skipping.
+                        val maxRetryForError = if (isNetworkError) 1 else maxRetries
                         
                         if (retryCount < maxRetryForError && currentMediaItem != null) {
-                            val waitMs = when (retryCount) {
-                                0 -> 3000L // 3 sec initial buffer
-                                else -> 6000L // 6 sec final effort
-                            }
                             retryCount++
                             scope.launch {
-                                delay(waitMs)
+                                delay(1500L) // 1.5 sec — fair chance for network, not frustrating
                                 stop()
                                 prepare()
                                 play()
@@ -419,9 +415,26 @@ class RadioPlaybackService : MediaLibraryService() {
                     }
                     
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        // Reset retry count when playback is ready/playing
-                        if (playbackState == Player.STATE_READY) {
-                            retryCount = 0
+                        when (playbackState) {
+                            Player.STATE_READY -> retryCount = 0
+                            Player.STATE_ENDED -> {
+                                // Live radio never legitimately ends.
+                                // STATE_ENDED means server closed stream cleanly (dead/invalid stream).
+                                // Skip to next immediately — no retry needed.
+                                scope.launch {
+                                    delay(300L)
+                                    retryCount = 0
+                                    if (hasNextMediaItem()) {
+                                        seekToNextMediaItem()
+                                        prepare()
+                                        play()
+                                    } else if (mediaItemCount > 1) {
+                                        seekTo(0, 0L)
+                                        prepare()
+                                        play()
+                                    }
+                                }
+                            }
                         }
                     }
                 })
