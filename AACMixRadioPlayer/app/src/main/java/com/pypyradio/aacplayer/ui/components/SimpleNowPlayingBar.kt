@@ -234,9 +234,7 @@ fun SimpleNowPlayingBar(
                     IconButton(
                         onClick = { 
                             player.seekToPreviousMediaItem()
-                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                                player.prepare()
-                            }
+                            player.prepare()
                             player.play()
                         },
                         enabled = hasPrevious,
@@ -290,9 +288,7 @@ fun SimpleNowPlayingBar(
                     IconButton(
                         onClick = { 
                             player.seekToNextMediaItem()
-                            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                                player.prepare()
-                            }
+                            player.prepare()
                             player.play()
                         },
                         enabled = hasNext,

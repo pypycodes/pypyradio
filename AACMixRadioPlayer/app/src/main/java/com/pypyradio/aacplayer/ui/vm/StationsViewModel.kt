@@ -54,9 +54,9 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     
     /**
      * Continuous background health checker
-     * - Checks ALL unchecked stations (not just a few)
-     * - Re-checks failed stations periodically (they might come back online)
-     * - Runs continuously while app is open
+     * - Checks ALL unchecked stations using a HEAD request
+     * - Stations that fail are persisted to DB and never shown again
+     * - Previously failed stations are NOT re-checked (HEAD != stream playable)
      */
     private fun startPeriodicHealthCheck() = viewModelScope.launch(Dispatchers.IO) {
         // Initial delay before starting
@@ -85,26 +85,10 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
                 delay(500) // 500ms between checks to be gentle on network
             }
             
-            // After checking all unchecked, re-check some failed stations
-            // (they might have come back online)
-            val failedStations = _browse.value.stations.filter { station ->
-                _browse.value.failedStationIds.contains(station.stationuuid)
-            }
-            
-            for (station in failedStations) {
-                try {
-                    val isReachable = checkUrlReachable(station.urlResolved)
-                    if (isReachable) {
-                        // Station is back online!
-                        markStationWorkingSilent(station.stationuuid)
-                    }
-                } catch (e: Exception) {
-                    // Ignore
-                }
-                delay(500)
-            }
-            
-            // Wait 2 minutes before next full cycle
+            // After checking all unchecked stations, wait 2 minutes before next cycle.
+            // Previously failed stations are intentionally NOT re-checked:
+            // HEAD responses can be 200 even when the actual audio stream is dead.
+            // Stations are only un-marked when the user successfully plays them (STATE_READY).
             delay(2 * 60 * 1000L)
         }
     }

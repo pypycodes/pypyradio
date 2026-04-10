@@ -107,13 +107,16 @@ fun BrowseScreen(
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    // Station is working - mark it
-                    currentPlayingId?.let { vm.markStationWorking(it) }
-                } else if (playbackState == Player.STATE_ENDED) {
-                    // Live radio doesn't "end". If it ends, it's an unsupported format (like an m3u file) or dead
-                    currentPlayingId?.let { failedId ->
-                        vm.markStationFailed(failedId, "Stream format unsupported")
+                when (playbackState) {
+                    Player.STATE_READY -> currentPlayingId?.let { vm.markStationWorking(it) }
+                    Player.STATE_ENDED -> {
+                        // Live radio ended = dead stream. Mark failed and trigger advance.
+                        val failedId = currentPlayingId ?: return
+                        vm.markStationFailed(failedId, "Stream ended unexpectedly")
+                        if (player.mediaItemCount <= 1) {
+                            autoAdvanceFromId = failedId
+                        }
+                        // Multi-item case handled by service onPlaybackStateChanged
                     }
                 }
             }
