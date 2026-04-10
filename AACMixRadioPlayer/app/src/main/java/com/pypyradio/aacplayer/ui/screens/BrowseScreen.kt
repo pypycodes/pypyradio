@@ -129,12 +129,9 @@ fun BrowseScreen(
         onDispose { player.removeListener(listener) }
     }
     
-    // Play a single station — this is the RELIABLE approach.
-    // Sending a single item via MediaController avoids IPC serialization issues
-    // where onAddMediaItems in the service can drop/reorder items from a large playlist,
-    // causing startIndex to become 0 (always playing the first station).
-    // The service's onSetMediaItems will expand single items into playlists from its own
-    // caches for next/prev support (no IPC size concerns since it builds the playlist locally).
+    // Play a single station via single-item IPC to avoid TransactionTooLargeException.
+    // The cache is always updated before playback so the service can build the
+    // full next/prev playlist locally without Binder size limits.
     fun playStation(st: Station) {
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
@@ -160,42 +157,33 @@ fun BrowseScreen(
             return
         }
         
+        // Sync the cache immediately before play so the service has the correct
+        // ordered (filtered) list to build the queue from for next/prev support.
+        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
+        
         try {
-            player.stop()
-            player.clearMediaItems()
-            // Build a list of simple MediaItems for the entire active view
-            val itemsToPlay = displayStations.map { displaySt ->
-                val artUri = displaySt.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
-                MediaItem.Builder()
-                    .setMediaId(displaySt.stationuuid)
-                    .setUri(displaySt.urlResolved)
-                    .setRequestMetadata(
-                        MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(android.net.Uri.parse(displaySt.urlResolved))
-                            .build()
-                    )
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(displaySt.name)
-                            .setArtist(displaySt.countryCode ?: "Radio")
-                            .setAlbumTitle(displaySt.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                            .setArtworkUri(artUri)
-                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                            .setIsPlayable(true)
-                            .build()
-                    )
-                    .build()
-            }
+            val artworkUri = st.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(st.stationuuid)
+                .setUri(st.urlResolved)
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
+                        .build()
+                )
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(st.name)
+                        .setArtist(st.countryCode ?: "Radio")
+                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                        .setArtworkUri(artworkUri)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .setIsPlayable(true)
+                        .build()
+                )
+                .build()
             
-            val startIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            if (startIndex >= 0 && itemsToPlay.isNotEmpty()) {
-                player.setMediaItems(itemsToPlay, startIndex, 0L)
-            } else {
-                // Fallback to single item if not found
-                val fallbackItem = itemsToPlay.find { it.mediaId == st.stationuuid }
-                if (fallbackItem != null) player.setMediaItem(fallbackItem)
-            }
-            
+            player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
             currentPlayingId = st.stationuuid
