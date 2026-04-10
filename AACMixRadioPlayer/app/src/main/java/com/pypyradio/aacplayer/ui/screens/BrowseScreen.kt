@@ -110,8 +110,9 @@ fun BrowseScreen(
                 when (playbackState) {
                     Player.STATE_READY -> currentPlayingId?.let { vm.markStationWorking(it) }
                     Player.STATE_ENDED -> {
-                        // Live radio ended = dead stream. Mark failed and trigger advance.
-                        val failedId = currentPlayingId ?: return
+                        // Use player.currentMediaItem (authoritative) not cached currentPlayingId
+                        // to avoid stale IPC events marking the wrong station as failed.
+                        val failedId = player.currentMediaItem?.mediaId ?: return
                         vm.markStationFailed(failedId, "Stream ended unexpectedly")
                         if (player.mediaItemCount <= 1) {
                             autoAdvanceFromId = failedId
@@ -120,11 +121,13 @@ fun BrowseScreen(
                     }
                 }
             }
-            
+
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val failedId = currentPlayingId ?: return
+                // Use player.currentMediaItem (authoritative) not cached currentPlayingId.
+                // Stale IPC error events from previous playlist arrive after the user
+                // taps a new station, and currentPlayingId may already point to the new station.
+                val failedId = player.currentMediaItem?.mediaId ?: return
                 vm.markStationFailed(failedId, "Playback failed")
-                // If queue has only 1 item, service can't auto-skip — signal UI to advance
                 if (player.mediaItemCount <= 1) {
                     autoAdvanceFromId = failedId
                 }
@@ -142,6 +145,8 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
+        // Cancel any pending auto-advance so it doesn't override the user's manual choice
+        autoAdvanceFromId = null
         val now = System.currentTimeMillis()
         // 100ms debounce: prevent accidental double-tap, but don't block quick station switching
         if (now - lastPlayTime < 100) return
@@ -214,7 +219,9 @@ fun BrowseScreen(
             player.setMediaItems(mediaItems, startIndexInWindow, 0L)
             player.prepare()
             player.play()
-            currentPlayingId = st.stationuuid
+            // Do NOT set currentPlayingId here — let onEvents update it from the actual player state.
+            // Setting it here races with async IPC error events from the PREVIOUS playlist,
+            // causing those stale errors to mark the new station as failed.
         } catch (e: Exception) {
             vm.markStationFailed(st.stationuuid, "Playback error")
             scope.launch { snackbarHostState.showSnackbar("Station unavailable", duration = SnackbarDuration.Short) }
