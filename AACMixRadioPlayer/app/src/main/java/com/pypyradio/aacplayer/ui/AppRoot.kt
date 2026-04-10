@@ -37,6 +37,7 @@ import com.pypyradio.aacplayer.ui.screens.BrowseScreen
 import com.pypyradio.aacplayer.ui.screens.FavoritesScreen
 import com.pypyradio.aacplayer.ui.screens.PodcastScreen
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
+import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 
 // Main navigation tabs
 private enum class MainNavTab(
@@ -51,7 +52,7 @@ private enum class MainNavTab(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(vm: StationsViewModel = viewModel()) {
+fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = viewModel()) {
     var selectedTab by remember { mutableStateOf(MainNavTab.RADIO) }
     var showAbout by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
@@ -228,6 +229,7 @@ fun AppRoot(vm: StationsViewModel = viewModel()) {
                     vm = vm,
                     player = player,
                     onGoAbout = { showAbout = true },
+                    onGoPodcasts = { selectedTab = MainNavTab.PODCASTS },
                     snackbarHostState = snackbarHostState,
                     modifier = Modifier.padding(padding)
                 )
@@ -237,6 +239,7 @@ fun AppRoot(vm: StationsViewModel = viewModel()) {
                 )
                 MainNavTab.FAVORITES -> FavoritesScreen(
                     vm = vm,
+                    podcastVm = podcastVm,
                     player = player,
                     modifier = Modifier.padding(padding)
                 )
