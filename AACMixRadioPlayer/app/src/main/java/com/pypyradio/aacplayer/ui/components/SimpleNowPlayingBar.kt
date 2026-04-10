@@ -69,15 +69,10 @@ fun SimpleNowPlayingBar(
                     hasError = false
                     isStopped = false
                 } else {
-                    // Max retries exceeded - mark as failed and try to skip to next
+                    // Max retries exceeded - mark as failed
                     mediaId?.let { id ->
                         onStationFailed(id)
-                        // Try to skip to next station if available
-                        if (hasNext) {
-                            player.seekToNextMediaItem()
-                            player.prepare()
-                            player.play()
-                        } else {
+                        if (!hasNext) {
                             // No next station, show error
                             hasError = true
                             isReconnecting = false

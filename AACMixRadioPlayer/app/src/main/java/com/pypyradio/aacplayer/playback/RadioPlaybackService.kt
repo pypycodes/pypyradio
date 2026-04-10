@@ -261,11 +261,7 @@ class RadioPlaybackService : MediaLibraryService() {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
             if (wifiManager != null) {
                 @Suppress("DEPRECATION")
-                val wifiMode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-                } else {
-                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
-                }
+                val wifiMode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
                 wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
                 wifiLock?.setReferenceCounted(false)
                 wifiLock?.acquire()
@@ -371,8 +367,8 @@ class RadioPlaybackService : MediaLibraryService() {
                                 prepare()
                                 play()
                             }
-                        } else if (prefs.isAutoSkipEnabled() && mediaItemCount > 1) {
-                            // Auto-skip to next station if enabled and retries exhausted
+                        } else if (mediaItemCount > 1) {
+                            // Auto-skip to next station if retries exhausted
                             scope.launch {
                                 delay(500L)
                                 retryCount = 0
@@ -414,17 +410,26 @@ class RadioPlaybackService : MediaLibraryService() {
             .setSessionActivity(pendingIntent)
             .build()
 
-        // Prefetch top stations for browsing (but don't auto-load into player - Android Auto requirement MA-1)
-        topStations = runBlocking { withContext(Dispatchers.IO) { repo.topVotedAac(120) } }
+        // Async prefetch top stations and podcasts for Android Auto browsing
+        scope.launch(Dispatchers.IO) {
+            topStations = repo.topVotedAac(120)
+            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_TOP, topStations.size, null) }
+        }
         
-        // Prefetch Top Hindi stations
-        topHindiStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("hindi", 100) } }
+        scope.launch(Dispatchers.IO) {
+            topHindiStations = repo.searchByLanguage("hindi", 100)
+            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_HINDI, topHindiStations.size, null) }
+        }
         
-        // Prefetch Top English stations
-        topEnglishStations = runBlocking { withContext(Dispatchers.IO) { repo.searchByLanguage("english", 100) } }
+        scope.launch(Dispatchers.IO) {
+            topEnglishStations = repo.searchByLanguage("english", 100)
+            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_ENGLISH, topEnglishStations.size, null) }
+        }
         
-        // Prefetch trending podcasts for Android Auto browsing
-        trendingPodcasts = runBlocking { withContext(Dispatchers.IO) { podcastRepo.getTrendingPodcasts(50) } }
+        scope.launch(Dispatchers.IO) {
+            trendingPodcasts = podcastRepo.getTrendingPodcasts(50)
+            launch(Dispatchers.Main) { session?.notifyChildrenChanged(MEDIA_ID_PODCASTS, trendingPodcasts.size, null) }
+        }
 
         // Keep favorites updated
         scope.launch {

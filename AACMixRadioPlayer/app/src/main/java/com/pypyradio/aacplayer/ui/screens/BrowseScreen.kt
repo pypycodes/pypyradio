@@ -104,11 +104,6 @@ fun BrowseScreen(
                     // Live radio doesn't "end". If it ends, it's an unsupported format (like an m3u file) or dead
                     currentPlayingId?.let { failedId ->
                         vm.markStationFailed(failedId, "Stream format unsupported")
-                        if (player.hasNextMediaItem()) {
-                            player.seekToNextMediaItem()
-                            player.prepare()
-                            player.play()
-                        }
                     }
                 }
             }
@@ -116,12 +111,7 @@ fun BrowseScreen(
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 currentPlayingId?.let { failedId ->
                     vm.markStationFailed(failedId, "Playback failed")
-                    // The service might be retrying, but if we get an error bubble up, we can also try to skip
-                    if (player.hasNextMediaItem()) {
-                        player.seekToNextMediaItem()
-                        player.prepare()
-                        player.play()
-                    }
+                    // The service will handle skipping automatically
                 }
             }
         }
@@ -338,10 +328,10 @@ fun BrowseScreen(
                 }
             }
             
-            // Do not hide failed stations, keeping them visible so the yellow warning mark is seen
-            val displayStations = remember(state.stations) {
+            // Hide failed stations
+            val displayStations = remember(state.stations, state.failedStationIds) {
                 state.stations.filter { 
-                    it.urlResolved.isNotBlank()
+                    it.urlResolved.isNotBlank() && !state.failedStationIds.contains(it.stationuuid)
                 }
             }
             
