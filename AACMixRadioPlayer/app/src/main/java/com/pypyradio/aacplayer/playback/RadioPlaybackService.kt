@@ -349,12 +349,17 @@ class RadioPlaybackService : MediaLibraryService() {
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED
                         
-                        // Buffer for max 1 retry before giving up and auto-skipping. 
-                        // Long retries look like the app is hung.
-                        val maxRetryForError = if (isNetworkError) 1 else maxRetries
+                        // Buffer for max 3 retries (progressive backoff) before auto-skipping.
+                        // This allows up to ~12 seconds of recovery time for cellular dead zones
+                        // without making the player feel permanently frozen.
+                        val maxRetryForError = if (isNetworkError) 3 else maxRetries
                         
                         if (retryCount < maxRetryForError && currentMediaItem != null) {
-                            val waitMs = 2000L // Fast 2 second retry buffer
+                            val waitMs = when (retryCount) {
+                                0 -> 2000L // 2 sec initial buffer
+                                1 -> 4000L // 4 sec secondary buffer
+                                else -> 6000L // 6 sec final effort
+                            }
                             retryCount++
                             scope.launch {
                                 delay(waitMs)
