@@ -78,9 +78,26 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
+      - name: Build Release APK
+        working-directory: AACMixRadioPlayer
+        run: ./gradlew assembleRelease
+
       - name: Build Release AAB
         working-directory: AACMixRadioPlayer
         run: ./gradlew bundleRelease
+
+      - name: Rename artifacts with version
+        working-directory: AACMixRadioPlayer
+        run: |
+          VERSION=${{ needs.check-version-change.outputs.version_name }}
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/pypyradio-${VERSION}.apk
+          mv app/build/outputs/bundle/release/app-release.aab app/build/outputs/bundle/release/pypyradio-${VERSION}.aab
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: AACMixRadioPlayer/app/build/outputs/apk/release/*.apk
 
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
@@ -99,8 +116,15 @@ jobs:
             **Version Code:** ${{ needs.check-version-change.outputs.version_code }}
             
             ### Downloads
+            - **APK** - Direct installation on Android devices
             - **AAB** - For Google Play Store upload
+            
+            ### Android Auto Fixes
+            - Fixed blank screen issue with immediate static content loading
+            - Pre-loaded stations prevent Android Auto timeouts
+            - Works offline with fallback radio stations
           files: |
+            AACMixRadioPlayer/app/build/outputs/apk/release/*.apk
             AACMixRadioPlayer/app/build/outputs/bundle/release/*.aab
           draft: false
           prerelease: false
