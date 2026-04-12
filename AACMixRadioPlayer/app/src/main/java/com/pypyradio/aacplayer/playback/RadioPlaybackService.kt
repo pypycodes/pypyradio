@@ -450,92 +450,110 @@ class RadioPlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        android.util.Log.i("RadioService", "===== RadioPlaybackService.onCreate() STARTED =====")
         
-        // Acquire WiFi lock to keep WiFi active when screen is off
         try {
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            if (wifiManager != null) {
-                @Suppress("DEPRECATION")
-                val wifiMode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
-                wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
-                wifiLock?.setReferenceCounted(false)
-                wifiLock?.acquire()
+            // Acquire WiFi lock to keep WiFi active when screen is off
+            android.util.Log.i("RadioService", "Acquiring WiFi lock...")
+            try {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                if (wifiManager != null) {
+                    @Suppress("DEPRECATION")
+                    val wifiMode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                    wifiLock = wifiManager.createWifiLock(wifiMode, "pypyradio:wifilock")
+                    wifiLock?.setReferenceCounted(false)
+                    wifiLock?.acquire()
+                    android.util.Log.i("RadioService", "WiFi lock acquired")
+                } else {
+                    android.util.Log.w("RadioService", "WiFiManager unavailable")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("RadioService", "WiFi lock acquisition failed: ${e.message}", e)
             }
-        } catch (e: Exception) {
-            // WiFi lock not critical - continue without it
-        }
-        
-        // Acquire partial wake lock to keep CPU running for network operations
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            if (powerManager != null) {
-                wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pypyradio:wakelock")
-                wakeLock?.setReferenceCounted(false)
-                wakeLock?.acquire()
+            
+            // Acquire partial wake lock to keep CPU running for network operations
+            android.util.Log.i("RadioService", "Acquiring wake lock...")
+            try {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (powerManager != null) {
+                    wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pypyradio:wakelock")
+                    wakeLock?.setReferenceCounted(false)
+                    wakeLock?.acquire()
+                    android.util.Log.i("RadioService", "Wake lock acquired")
+                } else {
+                    android.util.Log.w("RadioService", "PowerManager unavailable")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("RadioService", "Wake lock acquisition failed: ${e.message}", e)
             }
-        } catch (e: Exception) {
-            // Wake lock not critical - continue without it
-        }
 
         // Create notification channel for Android 8+
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                "playback",
-                "Media Playback",
-                android.app.NotificationManager.IMPORTANCE_DEFAULT  // Required for lock screen visibility
-            ).apply {
-                description = "Media playback controls"
-                setShowBadge(false)
-                setSound(null, null)  // No sound for media notifications
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC  // Show on lock screen
+            android.util.Log.i("RadioService", "Creating notification channel...")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    "playback",
+                    "Media Playback",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT  // Required for lock screen visibility
+                ).apply {
+                    description = "Media playback controls"
+                    setShowBadge(false)
+                    setSound(null, null)  // No sound for media notifications
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC  // Show on lock screen
+                }
+                val notificationManager = getSystemService(android.app.NotificationManager::class.java)
+                notificationManager.createNotificationChannel(channel)
+                android.util.Log.i("RadioService", "Notification channel created")
             }
-            val notificationManager = getSystemService(android.app.NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
-        }
 
-        // Notification provider with media controls (foreground)
-        setMediaNotificationProvider(
-            DefaultMediaNotificationProvider.Builder(this)
-                .setChannelId("playback")
-                .setNotificationId(1001)
-                .build()
-        )
+            // Notification provider with media controls (foreground)
+            android.util.Log.i("RadioService", "Setting media notification provider...")
+            setMediaNotificationProvider(
+                DefaultMediaNotificationProvider.Builder(this)
+                    .setChannelId("playback")
+                    .setNotificationId(1001)
+                    .build()
+            )
+            android.util.Log.i("RadioService", "Media notification provider set")
 
-        repo = StationRepository(AppDatabase.get(this).favoritesDao())
-        podcastRepo = PodcastRepository(AppDatabase.get(this).favoritePodcastDao())
-        prefs = AppPreferences.get(this)
+            android.util.Log.i("RadioService", "Initializing repositories...")
+            repo = StationRepository(AppDatabase.get(this).favoritesDao())
+            podcastRepo = PodcastRepository(AppDatabase.get(this).favoritePodcastDao())
+            prefs = AppPreferences.get(this)
+            android.util.Log.i("RadioService", "Repositories initialized")
 
         // Configure load control optimized for slow/unstable connections (especially Android Auto over car network)
-        // Larger buffers = more resilient to network hiccups
-        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                15000,   // Min buffer before playback starts (15 sec - longer for car network stability)
-                120000,  // Max buffer size (120 sec - very large buffer for Android Auto)
-                5000,    // Buffer for playback (5 sec)
-                15000    // Buffer for rebuffering (15 sec - more buffer after rebuffer for car)
-            )
-            .setPrioritizeTimeOverSizeThresholds(true) // Prioritize playback continuity
-            .build()
-        
-        // Audio attributes for music content - CRITICAL for Android Auto volume control
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
-        
-        player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
-            .setHandleAudioBecomingNoisy(true)
-            .setLoadControl(loadControl)
-            .setWakeMode(C.WAKE_MODE_NETWORK) // Keep WiFi/network alive during playback
-            .setDeviceVolumeControlEnabled(true) // Enable steering wheel volume control
-            .build().apply {
-                playWhenReady = true
-                // Enable shuffle and repeat modes for Android Auto controls
-                shuffleModeEnabled = false
-                repeatMode = Player.REPEAT_MODE_ALL
-                // Set device volume to use STREAM_MUSIC for car audio
-                setDeviceVolume(getDeviceVolume(), C.VOLUME_FLAG_SHOW_UI)
+            // Larger buffers = more resilient to network hiccups
+            android.util.Log.i("RadioService", "Creating ExoPlayer with custom LoadControl...")
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    15000,   // Min buffer before playback starts (15 sec - longer for car network stability)
+                    120000,  // Max buffer size (120 sec - very large buffer for Android Auto)
+                    5000,    // Buffer for playback (5 sec)
+                    15000    // Buffer for rebuffering (15 sec - more buffer after rebuffer for car)
+                )
+                .setPrioritizeTimeOverSizeThresholds(true) // Prioritize playback continuity
+                .build()
+            
+            // Audio attributes for music content - CRITICAL for Android Auto volume control
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
+            
+            player = ExoPlayer.Builder(this)
+                .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
+                .setHandleAudioBecomingNoisy(true)
+                .setLoadControl(loadControl)
+                .setWakeMode(C.WAKE_MODE_NETWORK) // Keep WiFi/network alive during playback
+                .setDeviceVolumeControlEnabled(true) // Enable steering wheel volume control
+                .build().apply {
+                    android.util.Log.i("RadioService", "ExoPlayer created successfully: ${player!=null}")
+                    playWhenReady = true
+                    // Enable shuffle and repeat modes for Android Auto controls
+                    shuffleModeEnabled = false
+                    repeatMode = Player.REPEAT_MODE_ALL
+                    // Set device volume to use STREAM_MUSIC for car audio
+                    setDeviceVolume(getDeviceVolume(), C.VOLUME_FLAG_SHOW_UI)
 
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -694,6 +712,12 @@ class RadioPlaybackService : MediaLibraryService() {
             repo.observeFavorites().collectLatest {
                 favoriteStations = it
             }
+        }
+
+        android.util.Log.i("RadioService", "===== RadioPlaybackService.onCreate() COMPLETED SUCCESSFULLY =====")
+        } catch (e: Exception) {
+            android.util.Log.e("RadioService", "===== RadioPlaybackService.onCreate() FAILED =====", e)
+            // Don't crash - at least try to keep the service alive
         }
     }
 
