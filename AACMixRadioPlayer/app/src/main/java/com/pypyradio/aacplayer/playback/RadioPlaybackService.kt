@@ -228,18 +228,24 @@ class RadioPlaybackService : MediaLibraryService() {
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
             android.util.Log.d("RadioService", "onGetLibraryRoot from ${browser.packageName} uid=${browser.uid}")
-            val root = MediaItem.Builder()
-                .setMediaId(MEDIA_ID_ROOT)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle("pypyradio")
-                        .setIsBrowsable(true)
-                        .setIsPlayable(false)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-                        .build()
-                )
-                .build()
-            return Futures.immediateFuture(LibraryResult.ofItem(root, params))
+            return try {
+                val root = MediaItem.Builder()
+                    .setMediaId(MEDIA_ID_ROOT)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle("pypyradio")
+                            .setIsBrowsable(true)
+                            .setIsPlayable(false)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                            .build()
+                    )
+                    .build()
+                android.util.Log.d("RadioService", "onGetLibraryRoot returning root item successfully")
+                Futures.immediateFuture(LibraryResult.ofItem(root, params))
+            } catch (e: Exception) {
+                android.util.Log.e("RadioService", "onGetLibraryRoot FAILED with exception", e)
+                Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+            }
         }
 
         override fun onGetChildren(
@@ -265,21 +271,9 @@ class RadioPlaybackService : MediaLibraryService() {
                 MEDIA_ID_ENGLISH -> topEnglishStations.map { playableFromStation(it) }
                 MEDIA_ID_FAV -> {
                     if (favoriteStations.isEmpty()) {
-                        // Return a "no favorites" placeholder
-                        val noFavStation = Station(
-                            stationuuid = "no_favorites",
-                            name = "No favorites added",
-                            urlResolved = "",
-                            homepage = null,
-                            favicon = null,
-                            tags = null,
-                            countryCode = null,
-                            language = null,
-                            codec = null,
-                            bitrate = null,
-                            lastCheckOk = null
-                        )
-                        listOf(playableFromStation(noFavStation))
+                        // Return empty list for empty favorites to avoid invalid artwork bitmap
+                        // MediaBrowserService will handle displaying "No favorites" message
+                        emptyList()
                     } else {
                         favoriteStations.map { playableFromStation(it) }
                     }
