@@ -199,6 +199,8 @@ class RadioPlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
+            android.util.Log.i("RadioService", "onConnect from ${controller.packageName} uid=${controller.uid}")
+
             // Enable all playback commands including next/prev for Android Auto
             val availableSessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .build()
@@ -225,6 +227,7 @@ class RadioPlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
+            android.util.Log.d("RadioService", "onGetLibraryRoot from ${browser.packageName} uid=${browser.uid}")
             val root = MediaItem.Builder()
                 .setMediaId(MEDIA_ID_ROOT)
                 .setMediaMetadata(
