@@ -755,7 +755,9 @@ class RadioPlaybackService : MediaLibraryService() {
         }
         player = null
         session = null
-        scope.cancel()
+        // NOTE: Don't cancel scope - let it complete naturally.
+        // Cancelling scope kills data loading jobs which breaks Android Auto queries.
+        // scope.cancel()
         super.onDestroy()
     }
 
