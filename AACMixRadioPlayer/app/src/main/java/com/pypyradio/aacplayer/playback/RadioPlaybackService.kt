@@ -721,7 +721,10 @@ class RadioPlaybackService : MediaLibraryService() {
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
+        android.util.Log.i("RadioService", "onGetSession called from ${controllerInfo.packageName} uid=${controllerInfo.uid}, returning session: ${session!=null}")
+        return session
+    }
 
     // Stop playback when swiped away
     override fun onTaskRemoved(rootIntent: Intent?) {
