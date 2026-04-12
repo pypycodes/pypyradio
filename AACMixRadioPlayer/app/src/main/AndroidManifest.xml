@@ -1,15 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- INTERNET: Required to stream radio stations -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
     <!-- FOREGROUND_SERVICE: Required for background audio playback -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    
     <!-- POST_NOTIFICATIONS: Required for media notification on Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
     <!-- WAKE_LOCK: Required to keep network alive during Android Auto playback -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
         android:name=".AACRadioApp"
         android:label="@string/app_name"
@@ -19,16 +24,17 @@
         android:allowBackup="true"
         android:supportsRtl="true">
 
-        <!-- Android Auto discovery -->
+        <!-- Android Auto discovery (from Google's gms library) -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
-        <!-- Attribution icon (monochrome) for car UI -->
+        <!-- Car app attribution icon (must be monochrome) -->
         <meta-data
             android:name="androidx.car.app.TintableAttributionIcon"
             android:resource="@drawable/ic_car_attribution" />
 
+        <!-- Main phone activity -->
         <activity
             android:name=".MainActivity"
             android:theme="@style/Theme.App.Starting"
@@ -39,12 +45,25 @@
             </intent-filter>
         </activity>
 
-        <!-- Media3 library service for background + Android Auto -->
+        <!-- Android Auto activity (UI template-based) -->
+        <activity
+            android:name=".auto.RadioCarAppActivity"
+            android:exported="true"
+            android:resizeableActivity="true"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.AUTOMOTIVE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Media3 backend service for both phone and Android Auto -->
         <service
             android:name=".playback.RadioPlaybackService"
-            android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:icon="@mipmap/ic_launcher">
+            android:exported="true"
+            android:process=".music">
+            <!-- Media3 MediaLibraryService intent filter -->
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
@@ -52,7 +71,7 @@
             </intent-filter>
         </service>
 
-        <!-- Media button receiver for steering wheel/Bluetooth hardware buttons -->
+        <!-- Media button receiver for hardware buttons -->
         <receiver
             android:name="androidx.media3.session.MediaButtonReceiver"
             android:exported="true">
@@ -62,4 +81,5 @@
         </receiver>
 
     </application>
+
 </manifest>
