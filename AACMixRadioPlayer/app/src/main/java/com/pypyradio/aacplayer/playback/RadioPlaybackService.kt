@@ -48,6 +48,7 @@ class RadioPlaybackService : MediaLibraryService() {
         const val MEDIA_ID_BY_LANGUAGE = "by_language"
         const val MEDIA_ID_ENGLISH = "english"
         const val MEDIA_ID_HINDI = "hindi"
+        const val MEDIA_ID_PODCASTS = "podcasts"
 
         // Instant response stations
         private val SAMPLE_STATIONS = listOf(
@@ -244,7 +245,8 @@ class RadioPlaybackService : MediaLibraryService() {
                     MEDIA_ID_ROOT -> listOf(
                         browsableItem(MEDIA_ID_TOP_STATIONS, "Top Stations"),
                         browsableItem(MEDIA_ID_FAVORITES, "Favorites"),
-                        browsableItem(MEDIA_ID_BY_LANGUAGE, "By Language")
+                        browsableItem(MEDIA_ID_BY_LANGUAGE, "By Language"),
+                        browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> cachedStations.take(50).map(::playableItem)
                     MEDIA_ID_FAVORITES -> cachedStations.take(20).map(::playableItem)
@@ -258,6 +260,13 @@ class RadioPlaybackService : MediaLibraryService() {
                     MEDIA_ID_HINDI -> cachedStations
                         .filter { it.language?.lowercase() == "hindi" }
                         .map(::playableItem)
+                    MEDIA_ID_PODCASTS -> listOf(
+                        browsableItem("podcast_1", "The Daily"),
+                        browsableItem("podcast_2", "Tech Talk Daily"),
+                        browsableItem("podcast_3", "News Briefing"),
+                        browsableItem("podcast_4", "Music Stories"),
+                        browsableItem("podcast_5", "Road Trip Podcast")
+                    )
                     else -> emptyList()
                 }
                 Log.d(TAG, "Returning ${items.size} items for $parentId")
@@ -282,6 +291,55 @@ class RadioPlaybackService : MediaLibraryService() {
                 }
             } catch (e: Exception) {
                 Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+            }
+        }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            Log.d(TAG, "onSetMediaItems: ${mediaItems.size} items, startIndex=$startIndex")
+            
+            return try {
+                if (mediaItems.isEmpty()) {
+                    Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+                    )
+                } else {
+                    // Resolve stations from cache to ensure URIs are properly set
+                    val resolvedItems = mediaItems.map { item ->
+                        val mediaId = item.mediaId
+                        val station = cachedStations.find { it.stationuuid == mediaId }
+                        
+                        if (station != null && item.localConfiguration == null) {
+                            // Station found in cache but URI not set - use cached version
+                            playableItem(station)
+                        } else if (station != null) {
+                            // Already has URI, just use it
+                            item
+                        } else {
+                            // Fallback to item as-is
+                            item
+                        }
+                    }
+                    
+                    Log.d(TAG, "Setting ${resolvedItems.size} items to player, starting at index $startIndex")
+                    player?.setMediaItems(resolvedItems, startIndex, startPositionMs)
+                    player?.prepare()
+                    player?.play()
+                    
+                    Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "onSetMediaItems error", e)
+                Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+                )
             }
         }
 
