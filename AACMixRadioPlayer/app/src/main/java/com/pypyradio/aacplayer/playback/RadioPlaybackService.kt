@@ -10,19 +10,26 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.pypyradio.aacplayer.MainActivity
 import com.pypyradio.aacplayer.data.db.AppDatabase
+import com.pypyradio.aacplayer.data.model.Podcast
+import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.data.prefs.AppPreferences
+import com.pypyradio.aacplayer.data.repo.PodcastRepository
 import com.pypyradio.aacplayer.data.repo.StationRepository
 import kotlinx.coroutines.*
 
@@ -99,8 +106,14 @@ class RadioPlaybackService : MediaLibraryService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private lateinit var stationRepo: StationRepository
+    private lateinit var podcastRepo: PodcastRepository
     private lateinit var prefs: AppPreferences
     private var cachedStations: List<Station> = SAMPLE_STATIONS
+    private var cachedPodcasts: List<Podcast> = emptyList()
+    private var cachedEpisodes: Map<String, List<PodcastEpisode>> = emptyMap()
+    private var failedStations = mutableSetOf<String>()
+    private var currentStationIndex = 0
+    private var isAutoSkipping = false
 
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -113,9 +126,10 @@ class RadioPlaybackService : MediaLibraryService() {
             // Initialize data layer
             val db = AppDatabase.get(this)
             stationRepo = StationRepository(db.favoritesDao())
+            podcastRepo = PodcastRepository(db.favoritePodcastDao())
             prefs = AppPreferences(this)
 
-            // Create player
+            // Create player with error handling
             player = ExoPlayer.Builder(this)
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -126,14 +140,31 @@ class RadioPlaybackService : MediaLibraryService() {
                 )
                 .setHandleAudioBecomingNoisy(true)
                 .build()
+            
+            // Add player listener for error handling
+            player?.addListener(PlayerErrorListener())
 
-           // Create session
+           // Create session with custom commands for next/prev
             session = MediaLibrarySession.Builder(this, player!!, RadioLibraryCallback())
                 .setSessionActivity(
                     PendingIntent.getActivity(
                         this, 0,
                         Intent(this, MainActivity::class.java),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+                .setCustomLayout(
+                    listOf(
+                        androidx.media3.session.CommandButton.Builder()
+                            .setDisplayName("Previous")
+                            .setSessionCommand(SessionCommand("COMMAND_SKIP_PREV"))
+                            .setIcon(androidx.media3.common.C.ICON_SKIP_PREVIOUS)
+                            .build(),
+                        androidx.media3.session.CommandButton.Builder()
+                            .setDisplayName("Next")
+                            .setSessionCommand(SessionCommand("COMMAND_SKIP_NEXT"))
+                            .setIcon(androidx.media3.common.C.ICON_SKIP_NEXT)
+                            .build()
                     )
                 )
                 .build()
@@ -144,8 +175,9 @@ class RadioPlaybackService : MediaLibraryService() {
             // Acquire locks
             acquireWakeLocks()
 
-            // Load stations
+            // Load stations and podcasts
             loadStations()
+            loadPodcasts()
 
             Log.i(TAG, "Service initialized successfully")
         } catch (e: Exception) {
@@ -179,13 +211,36 @@ class RadioPlaybackService : MediaLibraryService() {
     private fun loadStations() {
         serviceScope.launch {
             try {
-                val loaded = stationRepo.topVotedAac(limit = 100)
+                val loaded = stationRepo.getFilteredAacStations(limit = 100)
                 if (loaded.isNotEmpty()) {
                     cachedStations = loaded
                     Log.d(TAG, "Loaded ${loaded.size} stations from API")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Station load error", e)
+            }
+        }
+    }
+
+    private fun loadPodcasts() {
+        serviceScope.launch {
+            try {
+                val loaded = podcastRepo.getTrendingPodcasts(limit = 20)
+                cachedPodcasts = loaded
+                Log.d(TAG, "Loaded ${loaded.size} podcasts from API")
+                
+                // Pre-load episodes for first few podcasts
+                loaded.take(5).forEach { podcast ->
+                    try {
+                        val episodes = podcastRepo.getEpisodes(podcast, limit = 20)
+                        cachedEpisodes = cachedEpisodes + (podcast.id to episodes)
+                        Log.d(TAG, "Loaded ${episodes.size} episodes for ${podcast.title}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to load episodes for ${podcast.title}", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Podcast load error", e)
             }
         }
     }
@@ -249,7 +304,18 @@ class RadioPlaybackService : MediaLibraryService() {
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> cachedStations.take(50).map(::playableItem)
-                    MEDIA_ID_FAVORITES -> cachedStations.take(20).map(::playableItem)
+                    MEDIA_ID_FAVORITES -> {
+                        serviceScope.launch {
+                            try {
+                                val favorites = stationRepo.observeFavorites().first()
+                                cachedStations = favorites
+                                Log.d(TAG, "Loaded ${favorites.size} favorite stations")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to load favorites", e)
+                            }
+                        }
+                        cachedStations.take(20).map(::playableItem)
+                    }
                     MEDIA_ID_BY_LANGUAGE -> listOf(
                         browsableItem(MEDIA_ID_ENGLISH, "English"),
                         browsableItem(MEDIA_ID_HINDI, "Hindi")
@@ -260,14 +326,34 @@ class RadioPlaybackService : MediaLibraryService() {
                     MEDIA_ID_HINDI -> cachedStations
                         .filter { it.language?.lowercase() == "hindi" }
                         .map(::playableItem)
-                    MEDIA_ID_PODCASTS -> listOf(
-                        browsableItem("podcast_1", "The Daily"),
-                        browsableItem("podcast_2", "Tech Talk Daily"),
-                        browsableItem("podcast_3", "News Briefing"),
-                        browsableItem("podcast_4", "Music Stories"),
-                        browsableItem("podcast_5", "Road Trip Podcast")
-                    )
-                    else -> emptyList()
+                    MEDIA_ID_PODCASTS -> cachedPodcasts.map { podcast ->
+                        browsableItem("podcast_${podcast.id}", podcast.title)
+                    }
+                    else -> if (parentId.startsWith("podcast_")) {
+                        val podcastId = parentId.removePrefix("podcast_")
+                        val podcast = cachedPodcasts.find { it.id == podcastId }
+                        if (podcast != null) {
+                            // Load episodes if not cached
+                            if (!cachedEpisodes.containsKey(podcastId)) {
+                                serviceScope.launch {
+                                    try {
+                                        val episodes = podcastRepo.getEpisodes(podcast, limit = 50)
+                                        cachedEpisodes = cachedEpisodes + (podcastId to episodes)
+                                        Log.d(TAG, "Loaded ${episodes.size} episodes for ${podcast.title}")
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Failed to load episodes for ${podcast.title}", e)
+                                    }
+                                }
+                            }
+                            cachedEpisodes[podcastId]?.map { episode ->
+                                playablePodcastEpisodeItem(episode)
+                            } ?: emptyList()
+                        } else {
+                            emptyList()
+                        }
+                    } else {
+                        emptyList()
+                    }
                 }
                 Log.d(TAG, "Returning ${items.size} items for $parentId")
                 Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
@@ -294,6 +380,43 @@ class RadioPlaybackService : MediaLibraryService() {
             }
         }
 
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>
+        ): ListenableFuture<MutableList<MediaItem>> {
+            Log.d(TAG, "onAddMediaItems: ${mediaItems.size} items")
+            return try {
+                val resolvedItems = mediaItems.map { item ->
+                    val mediaId = item.mediaId
+                    
+                    // Check if it's a station
+                    val station = cachedStations.find { it.stationuuid == mediaId }
+                    if (station != null && item.localConfiguration == null) {
+                        playableItem(station)
+                    } else if (station != null) {
+                        item
+                    } else {
+                        // Check if it's a podcast episode
+                        val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
+                        if (episode != null && item.localConfiguration == null) {
+                            playablePodcastEpisodeItem(episode)
+                        } else if (episode != null) {
+                            item
+                        } else {
+                            // Fallback to item as-is
+                            item
+                        }
+                    }
+                }.toMutableList()
+                
+                Futures.immediateFuture(resolvedItems)
+            } catch (e: Exception) {
+                Log.e(TAG, "onAddMediaItems error", e)
+                Futures.immediateFuture(mediaItems)
+            }
+        }
+
         override fun onSetMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -309,31 +432,70 @@ class RadioPlaybackService : MediaLibraryService() {
                         MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
                     )
                 } else {
-                    // Resolve stations from cache to ensure URIs are properly set
-                    val resolvedItems = mediaItems.map { item ->
+                    // Resolve items from cache and validate before playback
+                    val resolvedItems = mediaItems.mapNotNull { item ->
                         val mediaId = item.mediaId
-                        val station = cachedStations.find { it.stationuuid == mediaId }
                         
-                        if (station != null && item.localConfiguration == null) {
-                            // Station found in cache but URI not set - use cached version
-                            playableItem(station)
-                        } else if (station != null) {
-                            // Already has URI, just use it
-                            item
+                        // Skip already failed stations
+                        if (failedStations.contains(mediaId)) {
+                            Log.d(TAG, "Skipping failed station: $mediaId")
+                            return@mapNotNull null
+                        }
+                        
+                        // Check if it's a station
+                        val station = cachedStations.find { it.stationuuid == mediaId }
+                        if (station != null) {
+                            // Validate station before creating media item
+                            if (isValidStation(station)) {
+                                if (item.localConfiguration == null) {
+                                    playableItem(station)
+                                } else {
+                                    item
+                                }
+                            } else {
+                                Log.w(TAG, "Station validation failed: ${station.name} ($mediaId)")
+                                failedStations.add(mediaId)
+                                null
+                            }
                         } else {
-                            // Fallback to item as-is
-                            item
+                            // Check if it's a podcast episode
+                            val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
+                            if (episode != null) {
+                                // Validate episode before creating media item
+                                if (isValidEpisode(episode)) {
+                                    if (item.localConfiguration == null) {
+                                        playablePodcastEpisodeItem(episode)
+                                    } else {
+                                        item
+                                    }
+                                } else {
+                                    Log.w(TAG, "Episode validation failed: ${episode.title} ($mediaId)")
+                                    failedStations.add(mediaId)
+                                    null
+                                }
+                            } else {
+                                Log.w(TAG, "Unknown media item: $mediaId")
+                                null
+                            }
                         }
                     }
                     
-                    Log.d(TAG, "Setting ${resolvedItems.size} items to player, starting at index $startIndex")
-                    player?.setMediaItems(resolvedItems, startIndex, startPositionMs)
-                    player?.prepare()
-                    player?.play()
-                    
-                    Futures.immediateFuture(
-                        MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
-                    )
+                    if (resolvedItems.isEmpty()) {
+                        Log.w(TAG, "No valid media items after validation")
+                        showPlaybackError("No valid stations", "All selected stations failed validation")
+                        Futures.immediateFuture(
+                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
+                        )
+                    } else {
+                        Log.d(TAG, "Setting ${resolvedItems.size} validated items to player, starting at index $startIndex")
+                        player?.setMediaItems(resolvedItems, startIndex, startPositionMs)
+                        player?.prepare()
+                        player?.play()
+                        
+                        Futures.immediateFuture(
+                            MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "onSetMediaItems error", e)
@@ -371,5 +533,255 @@ class RadioPlaybackService : MediaLibraryService() {
                 )
                 .build()
         }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            command: SessionCommand,
+            args: androidx.media3.common.Bundle
+        ): ListenableFuture<SessionResult> {
+            Log.d(TAG, "onCustomCommand: ${command.customAction}")
+            return when (command.customAction) {
+                "COMMAND_SKIP_NEXT" -> {
+                    serviceScope.launch {
+                        player?.let { player ->
+                            if (player.hasNextMediaItem()) {
+                                player.seekToNextMediaItem()
+                            } else {
+                                // Auto-advance to first item if at end
+                                player.seekToDefaultPosition(0)
+                            }
+                        }
+                    }
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "COMMAND_SKIP_PREV" -> {
+                    serviceScope.launch {
+                        player?.let { player ->
+                            if (player.hasPreviousMediaItem()) {
+                                player.seekToPreviousMediaItem()
+                            } else {
+                                // Go to last item if at beginning
+                                val lastIndex = (player.mediaItemCount - 1).coerceAtLeast(0)
+                                player.seekToDefaultPosition(lastIndex)
+                            }
+                        }
+                    }
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                else -> {
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+                }
+            }
+        }
+
+        private fun playablePodcastEpisodeItem(episode: PodcastEpisode): MediaItem {
+            return MediaItem.Builder()
+                .setMediaId(episode.id)
+                .setUri(episode.audioUrl)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(episode.title)
+                        .setArtist(episode.podcastTitle ?: "")
+                        .setGenre("Podcast")
+                        .setIsBrowsable(false)
+                        .setIsPlayable(true)
+                        .build()
+                )
+                .build()
+        }
+    }
+
+    /**
+     * Player listener for handling playback errors and automatic station skipping
+     */
+    private inner class PlayerErrorListener : Player.Listener {
+        
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e(TAG, "Playback error occurred", error)
+            handlePlaybackError(error)
+        }
+        
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_IDLE -> {
+                    Log.d(TAG, "Player state: IDLE")
+                }
+                Player.STATE_BUFFERING -> {
+                    Log.d(TAG, "Player state: BUFFERING")
+                    // Start timeout check for buffering
+                    startBufferingTimeoutCheck()
+                }
+                Player.STATE_READY -> {
+                    Log.d(TAG, "Player state: READY - Playback successful")
+                    // Reset failed stations on successful playback
+                    val currentMediaId = player?.currentMediaItem?.mediaId
+                    if (currentMediaId != null) {
+                        failedStations.remove(currentMediaId)
+                        Log.d(TAG, "Removed $currentMediaId from failed stations")
+                    }
+                    cancelBufferingTimeoutCheck()
+                }
+                Player.STATE_ENDED -> {
+                    Log.d(TAG, "Player state: ENDED")
+                    // Auto-advance to next station
+                    if (!isAutoSkipping) {
+                        skipToNextStation("Playback ended")
+                    }
+                }
+            }
+        }
+        
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            currentStationIndex = player?.currentMediaItemIndex ?: 0
+            val mediaId = mediaItem?.mediaId
+            Log.d(TAG, "Media item transition: $mediaId (index: $currentStationIndex, reason: $reason)")
+        }
+    }
+    
+    private var bufferingTimeoutJob: Job? = null
+    
+    private fun startBufferingTimeoutCheck() {
+        cancelBufferingTimeoutCheck()
+        bufferingTimeoutJob = serviceScope.launch {
+            delay(15000) // 15 seconds timeout
+            val currentState = player?.playbackState
+            if (currentState == Player.STATE_BUFFERING) {
+                Log.w(TAG, "Buffering timeout - treating as error")
+                handlePlaybackError(PlaybackException("Buffering timeout - station may be dead"))
+            }
+        }
+    }
+    
+    private fun cancelBufferingTimeoutCheck() {
+        bufferingTimeoutJob?.cancel()
+        bufferingTimeoutJob = null
+    }
+    
+    private fun handlePlaybackError(error: PlaybackException) {
+        if (isAutoSkipping) {
+            Log.d(TAG, "Already auto-skipping, ignoring error")
+            return
+        }
+        
+        val currentMediaId = player?.currentMediaItem?.mediaId
+        val currentStationName = player?.currentMediaItem?.mediaMetadata?.title
+        
+        Log.w(TAG, "Handling playback error for: $currentStationName ($currentMediaId)")
+        
+        // Add to failed stations
+        if (currentMediaId != null) {
+            failedStations.add(currentMediaId)
+            Log.d(TAG, "Added $currentMediaId to failed stations. Total failed: ${failedStations.size}")
+        }
+        
+        // Try to skip to next station
+        skipToNextStation("Playback error: ${error.message}")
+    }
+    
+    private fun skipToNextStation(reason: String) {
+        isAutoSkipping = true
+        
+        try {
+            val currentPlayer = player ?: return
+            val totalItems = currentPlayer.mediaItemCount
+            
+            if (totalItems <= 1) {
+                Log.w(TAG, "No other stations to skip to")
+                showPlaybackError(reason, "No other stations available")
+                isAutoSkipping = false
+                return
+            }
+            
+            // Try to find next playable station
+            var attempts = 0
+            val maxAttempts = minOf(totalItems, 10) // Prevent infinite loops
+            
+            while (attempts < maxAttempts) {
+                val nextIndex = (currentPlayer.currentMediaItemIndex + 1) % totalItems
+                val nextMediaItem = currentPlayer.getMediaItemAt(nextIndex)
+                val nextMediaId = nextMediaItem.mediaId
+                
+                Log.d(TAG, "Attempting to skip to station at index $nextIndex: $nextMediaId")
+                
+                if (!failedStations.contains(nextMediaId)) {
+                    Log.i(TAG, "Skipping to next station: $nextMediaId (Reason: $reason)")
+                    currentPlayer.seekToDefaultPosition(nextIndex)
+                    currentPlayer.prepare()
+                    currentPlayer.play()
+                    break
+                } else {
+                    Log.d(TAG, "Skipping failed station: $nextMediaId")
+                    attempts++
+                }
+            }
+            
+            if (attempts >= maxAttempts) {
+                Log.e(TAG, "All stations failed to play")
+                showPlaybackError(reason, "All stations failed to play. Please check your internet connection.")
+                // Reset failed stations after complete failure
+                failedStations.clear()
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during station skip", e)
+            showPlaybackError(reason, "Failed to skip to next station")
+        } finally {
+            isAutoSkipping = false
+        }
+    }
+    
+    
+    /**
+     * Validate station before playback
+     */
+    private fun isValidStation(station: Station): Boolean {
+        return station.urlResolved.isNotBlank() &&
+               station.name.isNotBlank() &&
+               (station.lastCheckOk == 1) &&
+               !failedStations.contains(station.stationuuid)
+    }
+    
+    /**
+     * Validate podcast episode before playback
+     */
+    private fun isValidEpisode(episode: PodcastEpisode): Boolean {
+        return episode.audioUrl.isNotBlank() &&
+               episode.title.isNotBlank() &&
+               !failedStations.contains(episode.id)
+    }
+    
+    private fun showPlaybackError(reason: String, details: String) {
+        Log.w(TAG, "Playback error - Reason: $reason, Details: $details")
+        
+        // You could show a notification or toast here
+        // For now, we'll just log it
+        serviceScope.launch {
+            try {
+                // Update media metadata to show error state
+                player?.let { player ->
+                    val currentMediaItem = player.currentMediaItem
+                    if (currentMediaItem != null) {
+                        val errorMetadata = MediaMetadata.Builder()
+                            .setTitle("Playback Error")
+                            .setArtist(details)
+                            .setGenre("Error")
+                            .build()
+                        
+                        val errorItem = MediaItem.Builder()
+                            .setMediaId("error")
+                            .setUri(currentMediaItem.localConfiguration?.uri)
+                            .setMediaMetadata(errorMetadata)
+                            .build()
+                        
+                        player.setMediaItem(errorItem)
+                        player.prepare()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to show error metadata", e)
+            }
+        }
+    }
     }
 }
