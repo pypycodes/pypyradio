@@ -1,0 +1,135 @@
+name: Promote Release to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to promote (e.g., 1.0.94)'
+        required: true
+        type: string
+      track:
+        description: 'Target track'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - beta
+          - alpha
+      rollout_percentage:
+        description: 'Rollout percentage (for production)'
+        required: false
+        default: '100'
+        type: string
+
+jobs:
+  promote-to-production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z (e.g., 1.0.94)"
+            exit 1
+          fi
+          echo "Valid version: $VERSION"
+
+      - name: Get Release Info from Google Play
+        id: get-release
+        run: |
+          # Get the latest release from Internal Testing track
+          echo "Fetching release info for version ${{ github.event.inputs.version }}..."
+          
+          # This would typically use Google Play Developer API
+          # For now, we'll simulate getting the AAB from the previous build
+          echo "release_found=true" >> $GITHUB_OUTPUT
+          echo "package_name=com.pypyradio.aacplayer" >> $GITHUB_OUTPUT
+
+      - name: Promote to Non-Production Track
+        if: steps.get-release.outputs.release_found == 'true' && github.event.inputs.track != 'production'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.pypyradio.aacplayer
+          releaseFiles: ""  # Empty since we're promoting existing release
+          track: ${{ github.event.inputs.track }}
+          status: completed
+          releaseName: "${{ github.event.inputs.version }} - Promoted to ${{ github.event.inputs.track }}"
+          whatsNewDirectory: whatsnew
+
+      - name: Promote to Production with Rollout
+        if: steps.get-release.outputs.release_found == 'true' && github.event.inputs.track == 'production'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.pypyradio.aacplayer
+          releaseFiles: ""  # Empty since we're promoting existing release
+          track: production
+          status: completed
+          releaseName: "${{ github.event.inputs.version }} - Promoted to Production (${{ github.event.inputs.rollout_percentage }}% rollout)"
+          whatsNewDirectory: whatsnew
+          rollout: ${{ github.event.inputs.rollout_percentage }}
+
+      - name: Update GitHub Release Status
+        if: steps.get-release.outputs.release_found == 'true'
+        run: |
+          # Update the GitHub release to mark it as promoted
+          VERSION="${{ github.event.inputs.version }}"
+          TRACK="${{ github.event.inputs.track }}"
+          ROLLOUT="${{ github.event.inputs.rollout_percentage }}"
+          
+          # Create release notes for promotion
+          cat > promotion-notes.md << EOF
+          ## Promotion Complete: v$VERSION
+          
+          **Track:** $TRACK
+          ${{ github.event.inputs.track == 'production' && format('**Rollout:** %s%%', github.event.inputs.rollout_percentage) || '' }}
+          **Promoted by:** ${{ github.actor }}
+          **Promoted at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          This release has been promoted from Internal Testing to $TRACK.
+          EOF
+          
+          # Update GitHub release with promotion info
+          gh release edit "v$VERSION" \
+            --title "Release v$VERSION (Promoted to $TRACK)" \
+            --notes-file promotion-notes.md \
+            --latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Rollout Status Issue (Optional)
+        if: github.event.inputs.track == 'production' && github.event.inputs.rollout_percentage != '100'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          ROLLOUT="${{ github.event.inputs.rollout_percentage }}"
+          
+          gh issue create \
+            --title "Rollout Status: v$VERSION - $ROLLOUT%" \
+            --body "## Rollout Status for v$VERSION
+          
+          **Current Rollout:** $ROLLOUT%
+          **Track:** Production
+          **Package:** com.pypyradio.aacplayer
+          
+          ### Monitoring Checklist
+          - [ ] Crash rate monitoring
+          - [ ] User feedback review
+          - [ ] Performance metrics
+          - [ ] Android Auto functionality
+          
+          ### Gradual Rollout Plan
+          - Phase 1: $ROLLOUT% (Current)
+          - Phase 2: 50% (After 24-48 hours if stable)
+          - Phase 3: 100% (After 72 hours if no issues)
+          
+          To increase rollout, run the promotion workflow again with higher percentage." \
+            --label "rollout" \
+            --label "v$VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
