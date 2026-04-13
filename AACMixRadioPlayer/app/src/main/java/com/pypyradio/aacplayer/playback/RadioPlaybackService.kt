@@ -505,6 +505,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     if (cachedPodcasts.isEmpty()) {
                         loadPodcastsSync()
                     }
+                    if (cachedFavorites.isEmpty()) {
+                        loadFavoritesSync()
+                    }
                     
                     // Resolve items from cache and validate before playback
                     val resolvedItems = mediaItems.mapNotNull { item ->
@@ -516,8 +519,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             return@mapNotNull null
                         }
                         
-                        // Check if it's a station
-                        val station = cachedStations.find { it.stationuuid == mediaId }
+                        // Check if it's a station (check both general cache and favorites)
+                        val station = cachedStations.find { it.stationuuid == mediaId } 
+                            ?: cachedFavorites.find { it.stationuuid == mediaId }
                         if (station != null) {
                             // Validate station before creating media item
                             if (isValidStation(station)) {
