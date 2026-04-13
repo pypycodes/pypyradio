@@ -113,6 +113,7 @@ class RadioPlaybackService : MediaLibraryService() {
     private var cachedStations: List<Station> = SAMPLE_STATIONS
     private var cachedPodcasts: List<Podcast> = emptyList()
     private var cachedEpisodes: Map<String, List<PodcastEpisode>> = emptyMap()
+    private var cachedFavorites: List<Station> = emptyList()
     private var failedStations = mutableSetOf<String>()
     private var currentStationIndex = 0
     private var isAutoSkipping = false
@@ -166,6 +167,7 @@ class RadioPlaybackService : MediaLibraryService() {
             // Load stations and podcasts
             loadStations()
             loadPodcasts()
+            refreshFavorites()
 
             Log.i(TAG, "Service initialized successfully")
         } catch (e: Exception) {
@@ -220,6 +222,36 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             Log.d(TAG, "Sync loaded ${loaded.size} podcasts from API")
         } catch (e: Exception) {
             Log.e(TAG, "Sync podcast load error", e)
+        }
+    }
+    
+    private fun loadFavoritesSync(): List<Station> {
+        return try {
+            val favorites = runBlocking {
+                stationRepo.observeFavorites().first()
+            }
+            Log.d(TAG, "Loaded ${favorites.size} favorites from database")
+            // Update cached favorites for consistency
+            cachedFavorites = favorites
+            favorites
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load favorites from database", e)
+            emptyList()
+        }
+    }
+    
+    private fun refreshFavorites() {
+        serviceScope.launch {
+            try {
+                val favorites = stationRepo.observeFavorites().first()
+                cachedFavorites = favorites
+                Log.d(TAG, "Refreshed favorites: ${favorites.size} items")
+                
+                // Notify Android Auto that the favorites have changed
+                session?.notifyChildrenChanged(MEDIA_ID_FAVORITES)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to refresh favorites", e)
+            }
         }
     }
     
@@ -326,10 +358,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         cachedStations.take(50).map(::playableItem)
                     }
                     MEDIA_ID_FAVORITES -> {
-                        if (cachedStations.isEmpty()) {
-                            loadStationsSync()
-                        }
-                        cachedStations.take(20).map(::playableItem)
+                        // Load actual favorites from database
+                        val favorites = loadFavoritesSync()
+                        favorites.map(::playableItem)
                     }
                     MEDIA_ID_BY_LANGUAGE -> listOf(
                         browsableItem(MEDIA_ID_ENGLISH, "English"),
