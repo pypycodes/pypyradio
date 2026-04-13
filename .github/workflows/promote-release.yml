@@ -63,10 +63,10 @@ jobs:
 
       - name: Download Release Artifacts
         if: steps.find-workflow.outputs.workflow_run_id != ''
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v3
         with:
-          workflow: 'Build and Release Android App.yml'
-          run-id: ${{ steps.find-workflow.outputs.workflow_run_id }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.find-workflow.outputs.workflow_run_id }}
           name: release-aab
           path: ./release
 
