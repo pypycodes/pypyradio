@@ -55,6 +55,8 @@ class RadioPlaybackService : MediaLibraryService() {
         const val MEDIA_ID_ROOT = "root"
         const val MEDIA_ID_TOP_STATIONS = "top_stations"
         const val MEDIA_ID_FAVORITES = "favorites"
+        const val MEDIA_ID_FAVORITE_STATIONS = "favorite_stations"
+        const val MEDIA_ID_FAVORITE_PODCASTS = "favorite_podcasts"
         const val MEDIA_ID_BY_LANGUAGE = "by_language"
         const val MEDIA_ID_ENGLISH = "english"
         const val MEDIA_ID_HINDI = "hindi"
@@ -380,9 +382,30 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         topStations.map(::playableItem)
                     }
                     MEDIA_ID_FAVORITES -> {
-                        // Load actual favorites from database
-                        val favorites = loadFavoritesSync()
-                        favorites.map(::playableItem)
+                        // Show sub-categories for stations and podcasts
+                        listOf(
+                            browsableItem(MEDIA_ID_FAVORITE_STATIONS, "Favorite Stations"),
+                            browsableItem(MEDIA_ID_FAVORITE_PODCASTS, "Favorite Podcasts")
+                        )
+                    }
+                    MEDIA_ID_FAVORITE_STATIONS -> {
+                        // Load favorite radio stations
+                        val favoriteStations = loadFavoritesSync()
+                        favoriteStations.map(::playableItem)
+                    }
+                    MEDIA_ID_FAVORITE_PODCASTS -> {
+                        // Load favorite podcasts
+                        val favoritePodcasts = runBlocking {
+                            try {
+                                podcastRepo.observeFavorites().first()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to load favorite podcasts", e)
+                                emptyList()
+                            }
+                        }
+                        favoritePodcasts.map { podcast ->
+                            browsableItem("podcast_${podcast.id}", podcast.title)
+                        }
                     }
                                         MEDIA_ID_ENGLISH -> {
                         val englishStations = runBlocking {
