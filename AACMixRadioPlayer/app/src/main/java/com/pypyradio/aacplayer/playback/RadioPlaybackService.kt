@@ -34,6 +34,7 @@ import com.pypyradio.aacplayer.data.repo.PodcastRepository
 import com.pypyradio.aacplayer.data.repo.StationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 
 /**
  * RadioPlaybackService - Media3 MediaLibraryService for Android Auto
@@ -248,7 +249,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 Log.d(TAG, "Refreshed favorites: ${favorites.size} items")
                 
                 // Notify Android Auto that the favorites have changed
-                session?.notifyChildrenChanged(MEDIA_ID_FAVORITES)
+                session?.notifyChildrenChanged(MEDIA_ID_FAVORITES, 0, null)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to refresh favorites", e)
             }
