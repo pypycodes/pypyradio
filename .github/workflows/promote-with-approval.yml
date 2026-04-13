@@ -6,9 +6,10 @@ on:
       track:
         description: 'Target track for promotion'
         required: true
-        default: 'beta'
+        default: 'alpha'
         type: choice
         options:
+          - alpha
           - beta
           - production
       version:
@@ -109,19 +110,20 @@ jobs:
           echo "DEBUG: Input version='${{ github.event.inputs.version }}'"
           
           # Validate release sequence
-          if [ "$TRACK" = "beta" ]; then
-            # Check if version was released to closed testing
-            echo "Checking if v$VERSION was released to closed testing..."
+          if [ "$TRACK" = "alpha" ]; then
+            # Alpha track is for closed testing - no prerequisites needed
+            echo "Alpha track: No prerequisites required"
+          elif [ "$TRACK" = "beta" ]; then
+            # Check if version was released to closed testing (alpha)
+            echo "Checking if v$VERSION was released to alpha (closed testing)..."
             CLOSED_ISSUES=$(gh issue list --label "closed-testing" --label "v$VERSION" --label "released" --limit 1 --json number --jq '.[] | .number')
             if [ -z "$CLOSED_ISSUES" ]; then
-              echo "ERROR: v$VERSION must first be released to closed testing before promoting to beta"
+              echo "ERROR: v$VERSION must first be released to alpha (closed testing) before promoting to beta"
               echo "Please run 'Release to Closed Testing (Alpha)' workflow first"
               exit 1
             fi
-            echo "Confirmed: v$VERSION was released to closed testing"
-          fi
-          
-          if [ "$TRACK" = "production" ]; then
+            echo "Confirmed: v$VERSION was released to alpha (closed testing)"
+          elif [ "$TRACK" = "production" ]; then
             # Check if version was promoted to beta
             echo "Checking if v$VERSION was promoted to beta..."
             BETA_ISSUES=$(gh issue list --label "promote-to-beta" --label "v$VERSION" --limit 1 --json number --jq '.[] | .number')
@@ -154,21 +156,24 @@ jobs:
           ---
           
           ### Release Sequence Validation :white_check_mark:
-          ${{ github.event.inputs.track == 'beta' && '- [x] Released to Closed Testing (Alpha)' || '' }}
-          ${{ github.event.inputs.track == 'production' && '- [x] Released to Closed Testing (Alpha)\n- [x] Promoted to Beta' || '' }}
+          ${{ github.event.inputs.track == 'alpha' && '- [x] Ready for Alpha (Closed Testing)' || '' }}
+          ${{ github.event.inputs.track == 'beta' && '- [x] Released to Alpha (Closed Testing)' || '' }}
+          ${{ github.event.inputs.track == 'production' && '- [x] Released to Alpha (Closed Testing)\n- [x] Promoted to Beta' || '' }}
           
           ---
           
           ### Approval Requirements
+          ${{ github.event.inputs.track == 'alpha' && format('- **Required Approvers:** %s', env.APPROVERS_BETA) || '' }}
           ${{ github.event.inputs.track == 'beta' && format('- **Required Approvers:** %s', env.APPROVERS_BETA) || '' }}
           ${{ github.event.inputs.track == 'production' && format('- **Required Approvers:** %s', env.APPROVERS_PRODUCTION) || '' }}
+          ${{ github.event.inputs.track == 'alpha' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_BETA) || '' }}
           ${{ github.event.inputs.track == 'beta' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_BETA) || '' }}
           ${{ github.event.inputs.track == 'production' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_PRODUCTION) || '' }}
           
           ---
           
           ### Approval Checklist
-          - [ ] Version tested in ${{ github.event.inputs.track == 'beta' && 'Closed Testing' || 'Beta' }}
+          - [ ] Version tested in ${{ github.event.inputs.track == 'alpha' && 'Development' || github.event.inputs.track == 'beta' && 'Alpha (Closed Testing)' || 'Beta' }}
           - [ ] No critical crashes or issues reported
           - [ ] Android Auto functionality verified
           - [ ] Performance metrics within acceptable range
