@@ -44,6 +44,120 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
      * Get filtered AAC stations with verified status, English/India preference, and quality sorting
      * This is the main method used by Android Auto for high-quality stations
      */
+    suspend fun getEnglishStations(limit: Int = 100): List<Station> {
+        val api = RadioBrowserClient.api()
+        // Fetch more stations to account for filtering
+        val allStations = mutableListOf<StationDto>()
+        
+        try {
+            // Get top voted stations (prioritized by clickcount/popularity)
+            val topStations = api.topVoted(limit * 3)
+            allStations.addAll(topStations)
+        } catch (e: Exception) {
+            // Fallback to search if topVoted fails
+            val searchResults = api.searchStations(
+                name = null,
+                codec = "aac",
+                language = "english",
+                hideBroken = true,
+                limit = limit * 3,
+                order = "clickcount",
+                reverse = true
+            )
+            allStations.addAll(searchResults)
+        }
+        
+        return allStations
+            // Strict verification: only stations verified as working
+            .filter { it.lastCheckOk == 1 }
+            // Must have valid URL
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            // AAC/AAC+ codec only (strict)
+            .filter { it.codec?.lowercase() in listOf("aac", "aac+", "he-aac", "xheaac") }
+            // English language only
+            .filter { it.language?.lowercase() == "english" }
+            // Convert to domain model
+            .map { it.toDomain() }
+            // Sort by quality (bitrate, then popularity)
+            .sortedWith(compareByDescending<Station> { it.bitrate ?: 0 }
+                .thenByDescending { it.tags?.contains("popular") == true }
+                .thenBy { it.name })
+            // Remove duplicates by name, keeping highest bitrate
+            .deduplicateByHighestBitrate()
+            // Take the requested limit
+            .take(limit)
+    }
+
+    suspend fun getIndianStations(limit: Int = 100): List<Station> {
+        val api = RadioBrowserClient.api()
+        // Fetch more stations to account for filtering
+        val allStations = mutableListOf<StationDto>()
+        
+        try {
+            // Get stations from India
+            val indianStations = api.searchStations(
+                name = null,
+                codec = "aac",
+                countryCode = "in",
+                hideBroken = true,
+                limit = limit * 3,
+                order = "clickcount",
+                reverse = true
+            )
+            allStations.addAll(indianStations)
+        } catch (e: Exception) {
+            // Fallback to search by Indian languages
+            val indianLanguages = listOf("hindi", "bengali", "tamil", "telugu", "marathi", "gujarati", "punjabi")
+            indianLanguages.forEach { language ->
+                try {
+                    val langStations = api.searchStations(
+                        name = null,
+                        codec = "aac",
+                        language = language,
+                        hideBroken = true,
+                        limit = 50,
+                        order = "clickcount",
+                        reverse = true
+                    )
+                    allStations.addAll(langStations)
+                } catch (e: Exception) {
+                    // Continue with next language
+                }
+            }
+        }
+        
+        return allStations
+            // Strict verification: only stations verified as working
+            .filter { it.lastCheckOk == 1 }
+            // Must have valid URL
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            // AAC/AAC+ codec only (strict)
+            .filter { it.codec?.lowercase() in listOf("aac", "aac+", "he-aac", "xheaac") }
+            // Indian stations (country code or Indian languages)
+            .filter { station ->
+                val countryCode = station.countryCode?.lowercase()
+                val language = station.language?.lowercase()
+                val tags = station.tags?.lowercase()
+                
+                // Include stations from India
+                countryCode == "in" ||
+                // Include Indian languages
+                language in listOf("hindi", "bengali", "tamil", "telugu", "marathi", "gujarati", "punjabi") ||
+                // Include stations tagged with India
+                tags?.contains("india") == true
+            }
+            // Convert to domain model
+            .map { it.toDomain() }
+            // Sort by quality (bitrate, then popularity)
+            .sortedWith(compareByDescending<Station> { it.bitrate ?: 0 }
+                .thenByDescending { it.tags?.contains("popular") == true }
+                .thenBy { it.name })
+            // Remove duplicates by name, keeping highest bitrate
+            .deduplicateByHighestBitrate()
+            // Take the requested limit
+            .take(limit)
+    }
+
     suspend fun getFilteredAacStations(limit: Int = 500): List<Station> {
         val api = RadioBrowserClient.api()
         
