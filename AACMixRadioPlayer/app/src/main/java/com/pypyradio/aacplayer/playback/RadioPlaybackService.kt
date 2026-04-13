@@ -154,18 +154,6 @@ class RadioPlaybackService : MediaLibraryService() {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
                 )
-                .setCustomLayout(
-                    listOf(
-                        androidx.media3.session.CommandButton.Builder()
-                            .setDisplayName("Previous")
-                            .setSessionCommand(SessionCommand("COMMAND_SKIP_PREV"))
-                            .build(),
-                        androidx.media3.session.CommandButton.Builder()
-                            .setDisplayName("Next")
-                            .setSessionCommand(SessionCommand("COMMAND_SKIP_NEXT"))
-                            .build()
-                    )
-                )
                 .build()
 
             // Notification
@@ -306,7 +294,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     MEDIA_ID_FAVORITES -> {
                         serviceScope.launch {
                             try {
-                                val favorites = kotlinx.coroutines.runBlocking { stationRepo.observeFavorites().first() }
+                                val favorites = stationRepo.observeFavorites().first()
                                 cachedStations = favorites
                                 Log.d(TAG, "Loaded ${favorites.size} favorite stations")
                             } catch (e: Exception) {
@@ -533,47 +521,7 @@ class RadioPlaybackService : MediaLibraryService() {
                 .build()
         }
 
-        override fun onCustomCommand(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            command: SessionCommand,
-            args: Bundle?
-        ): ListenableFuture<SessionResult> {
-            Log.d(TAG, "onCustomCommand: ${command.customAction}")
-            return when (command.customAction) {
-                "COMMAND_SKIP_NEXT" -> {
-                    serviceScope.launch {
-                        player?.let { player ->
-                            if (player.hasNextMediaItem()) {
-                                player.seekToNextMediaItem()
-                            } else {
-                                // Auto-advance to first item if at end
-                                player.seekToDefaultPosition(0)
-                            }
-                        }
-                    }
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-                }
-                "COMMAND_SKIP_PREV" -> {
-                    serviceScope.launch {
-                        player?.let { player ->
-                            if (player.hasPreviousMediaItem()) {
-                                player.seekToPreviousMediaItem()
-                            } else {
-                                // Go to last item if at beginning
-                                val lastIndex = (player.mediaItemCount - 1).coerceAtLeast(0)
-                                player.seekToDefaultPosition(lastIndex)
-                            }
-                        }
-                    }
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-                }
-                else -> {
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
-                }
-            }
-        }
-
+        
         private fun playablePodcastEpisodeItem(episode: PodcastEpisode): MediaItem {
             return MediaItem.Builder()
                 .setMediaId(episode.id)
