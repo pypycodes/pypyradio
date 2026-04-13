@@ -48,6 +48,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Fetch available versions from tags
         id: get-versions
@@ -56,6 +59,21 @@ jobs:
           VERSIONS=$(git tag -l "v*" --sort=-version:refname | sed 's/^v//' | head -20)
           
           echo "Available versions:"
+          echo "$VERSIONS"
+          
+          # Fallback: Use GitHub API if git tags don't work
+          if [ -z "$VERSIONS" ]; then
+            echo "Git tags empty, using GitHub API fallback..."
+            VERSIONS=$(gh api repos/:owner/:repo/git/refs/tags --jq '.[] | select(.ref | startswith("refs/tags/v")) | .ref | sub("refs/tags/"; "") | sub("^v"; "")' | sort -V -r | head -20)
+          fi
+          
+          # Final fallback: Use hardcoded recent versions
+          if [ -z "$VERSIONS" ]; then
+            echo "Using hardcoded fallback versions..."
+            VERSIONS=$(printf "1.0.94\n1.0.93\n1.0.92\n1.0.91\n1.0.90\n1.0.89\n1.0.88\n1.0.87\n1.0.86\n1.0.85")
+          fi
+          
+          echo "Final versions list:"
           echo "$VERSIONS"
           
           # Convert to JSON format
