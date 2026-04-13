@@ -637,7 +637,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 .setUri(station.urlResolved)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(station.name ?: "Unknown Station")
+                        .setTitle(station.name)
                         .setArtist(station.countryCode ?: "Unknown")
                         .setGenre(station.tags ?: "Radio")
                         .setAlbumTitle(station.language?.let { "$it Radio" } ?: "Radio")
