@@ -33,6 +33,7 @@ import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
 import com.pypyradio.aacplayer.data.repo.StationRepository
 import kotlinx.coroutines.*
+import kotlinx.coroutines.runBlocking
 
 /**
  * RadioPlaybackService - Media3 MediaLibraryService for Android Auto
@@ -209,6 +210,32 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             }
         }
     }
+    
+    private fun loadPodcastsSync() {
+        try {
+            val loaded = runBlocking {
+                podcastRepo.getTrendingPodcasts(limit = 20)
+            }
+            cachedPodcasts = loaded
+            Log.d(TAG, "Sync loaded ${loaded.size} podcasts from API")
+        } catch (e: Exception) {
+            Log.e(TAG, "Sync podcast load error", e)
+        }
+    }
+    
+    private fun loadStationsSync() {
+        try {
+            val loaded = runBlocking {
+                stationRepo.getFilteredAacStations(limit = 100)
+            }
+            if (loaded.isNotEmpty()) {
+                cachedStations = loaded
+                Log.d(TAG, "Sync loaded ${loaded.size} stations from API")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Sync station load error", e)
+        }
+    }
 
     private fun loadPodcasts() {
         serviceScope.launch {
@@ -291,23 +318,46 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         browsableItem(MEDIA_ID_BY_LANGUAGE, "By Language"),
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
-                    MEDIA_ID_TOP_STATIONS -> cachedStations.take(50).map(::playableItem)
+                    MEDIA_ID_TOP_STATIONS -> {
+                        if (cachedStations.isEmpty()) {
+                            // Return loading placeholder or try to load stations synchronously
+                            loadStationsSync()
+                        }
+                        cachedStations.take(50).map(::playableItem)
+                    }
                     MEDIA_ID_FAVORITES -> {
-                        // Load favorites asynchronously, return current cached stations for now
+                        if (cachedStations.isEmpty()) {
+                            loadStationsSync()
+                        }
                         cachedStations.take(20).map(::playableItem)
                     }
                     MEDIA_ID_BY_LANGUAGE -> listOf(
                         browsableItem(MEDIA_ID_ENGLISH, "English"),
                         browsableItem(MEDIA_ID_HINDI, "Hindi")
                     )
-                    MEDIA_ID_ENGLISH -> cachedStations
-                        .filter { it.language?.lowercase() == "english" }
-                        .map(::playableItem)
-                    MEDIA_ID_HINDI -> cachedStations
-                        .filter { it.language?.lowercase() == "hindi" }
-                        .map(::playableItem)
-                    MEDIA_ID_PODCASTS -> cachedPodcasts.map { podcast ->
-                        browsableItem("podcast_${podcast.id}", podcast.title)
+                    MEDIA_ID_ENGLISH -> {
+                        if (cachedStations.isEmpty()) {
+                            loadStationsSync()
+                        }
+                        cachedStations
+                            .filter { it.language?.lowercase() == "english" }
+                            .map(::playableItem)
+                    }
+                    MEDIA_ID_HINDI -> {
+                        if (cachedStations.isEmpty()) {
+                            loadStationsSync()
+                        }
+                        cachedStations
+                            .filter { it.language?.lowercase() == "hindi" }
+                            .map(::playableItem)
+                    }
+                    MEDIA_ID_PODCASTS -> {
+                        if (cachedPodcasts.isEmpty()) {
+                            loadPodcastsSync()
+                        }
+                        cachedPodcasts.map { podcast ->
+                            browsableItem("podcast_${podcast.id}", podcast.title)
+                        }
                     }
                     else -> if (parentId.startsWith("podcast_")) {
                         val podcastId = parentId.removePrefix("podcast_")
@@ -412,6 +462,14 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
                     )
                 } else {
+                    // Ensure data is loaded before resolving items
+                    if (cachedStations.isEmpty()) {
+                        loadStationsSync()
+                    }
+                    if (cachedPodcasts.isEmpty()) {
+                        loadPodcastsSync()
+                    }
+                    
                     // Resolve items from cache and validate before playback
                     val resolvedItems = mediaItems.mapNotNull { item ->
                         val mediaId = item.mediaId
