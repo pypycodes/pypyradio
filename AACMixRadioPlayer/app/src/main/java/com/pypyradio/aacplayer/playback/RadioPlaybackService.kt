@@ -176,7 +176,8 @@ class RadioPlaybackService : MediaLibraryService() {
     private fun acquireWakeLocks() {
         try {
             val wifiMgr = getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyradio")
+            @Suppress("DEPRECATION")
+wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyradio")
             wifiLock?.setReferenceCounted(false)
             wifiLock?.acquire()
             Log.d(TAG, "WiFi lock acquired")
