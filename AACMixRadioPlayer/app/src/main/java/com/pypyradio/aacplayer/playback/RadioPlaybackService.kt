@@ -383,9 +383,29 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         if (cachedStations.isEmpty()) {
                             loadStationsSync()
                         }
-                        cachedStations
-                            .filter { it.language?.lowercase() == "hindi" }
-                            .map(::playableItem)
+                        // Debug: Log available languages
+                        val availableLanguages = cachedStations.mapNotNull { it.language }.distinct()
+                        Log.d(TAG, "Available languages: $availableLanguages")
+                        
+                        val hindiStations = cachedStations.filter { it.language?.lowercase() == "hindi" }
+                        Log.d(TAG, "Found ${hindiStations.size} Hindi stations")
+                        
+                        // If no Hindi stations, try other Indian languages
+                        val indianStations = if (hindiStations.isEmpty()) {
+                            cachedStations.filter { station ->
+                                station.language?.lowercase()?.let { lang ->
+                                    lang.contains("hindi") || lang.contains("indian") || 
+                                    lang.contains("bengali") || lang.contains("tamil") ||
+                                    lang.contains("telugu") || lang.contains("marathi") ||
+                                    lang.contains("gujarati") || lang.contains("punjabi")
+                                } == true
+                            }
+                        } else {
+                            hindiStations
+                        }
+                        
+                        Log.d(TAG, "Found ${indianStations.size} Indian language stations")
+                        indianStations.map(::playableItem)
                     }
                     MEDIA_ID_PODCASTS -> {
                         if (cachedPodcasts.isEmpty()) {
