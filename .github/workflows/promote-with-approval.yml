@@ -386,38 +386,60 @@ jobs:
             if [ -f "$ANY_AAB" ]; then
               echo "Found AAB file but wrong version: $ANY_AAB"
               echo "Expected version: $VERSION"
-              echo "This AAB is from an older build, searching for newer workflow..."
+              echo "This AAB is from an older build, checking if v$VERSION release workflow ran..."
               
-              # Try to find a more recent workflow run
-              WORKFLOW_RUNS=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=5 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId')
-              
-              for RUN_ID in $WORKFLOW_RUNS; do
-                echo "Checking workflow run $RUN_ID..."
-                # Download artifacts from this run
-                rm -rf ./release/*
-                dawidd6/action-download-artifact@v3 \
-                  --github-token ${{ secrets.GITHUB_TOKEN }} \
-                  --run-id $RUN_ID \
-                  --name release-aab \
-                  --path ./release
+              # Check if the release workflow was triggered for v$VERSION
+              echo "Checking for v$VERSION tag and corresponding workflow run..."
+              TAG_EXISTS=$(gh tag list --limit 100 | grep "v$VERSION" || echo "")
+              if [ -n "$TAG_EXISTS" ]; then
+                echo "Tag v$VERSION exists, checking if release workflow ran..."
                 
-                # Check if this has the right version
-                CORRECT_AAB=$(find ./release -name "*$VERSION*.aab" | head -1)
-                if [ -f "$CORRECT_AAB" ]; then
-                  echo "Found correct AAB in workflow run $RUN_ID: $CORRECT_AAB"
-                  echo "workflow_run_id=$RUN_ID" >> $GITHUB_OUTPUT
-                  break
+                # Look for workflow runs that might have created this tag
+                RELEASE_RUNS=$(gh run list --workflow="Build and Release Android App" --limit=20 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId')
+                
+                FOUND_CORRECT=false
+                for RUN_ID in $RELEASE_RUNS; do
+                  echo "Checking workflow run $RUN_ID for v$VERSION..."
+                  
+                  # Download artifacts from this run
+                  rm -rf ./release/*
+                  dawidd6/action-download-artifact@v3 \
+                    --github-token ${{ secrets.GITHUB_TOKEN }} \
+                    --run-id $RUN_ID \
+                    --name release-aab \
+                    --path ./release
+                  
+                  # Check if this has the right version
+                  CORRECT_AAB=$(find ./release -name "*$VERSION*.aab" | head -1)
+                  if [ -f "$CORRECT_AAB" ]; then
+                    echo "Found correct AAB in workflow run $RUN_ID: $CORRECT_AAB"
+                    FOUND_CORRECT=true
+                    break
+                  fi
+                done
+                
+                if [ "$FOUND_CORRECT" = "false" ]; then
+                  echo "ERROR: No v$VERSION AAB found in any release workflow runs"
+                  echo "This means the release workflow was not triggered for v$VERSION"
+                  echo "Please run the 'Build and Release Android App' workflow for v$VERSION first"
+                  echo "You can trigger it by pushing the v$VERSION tag or running the workflow manually"
+                  exit 1
                 fi
-              done
+              else
+                echo "ERROR: Tag v$VERSION does not exist"
+                echo "Please create the v$VERSION tag first"
+                exit 1
+              fi
             else
-              echo "No AAB file found in release artifacts"
+              echo "ERROR: No AAB file found in release artifacts"
+              echo "This means no release workflow has been run"
               exit 1
             fi
           fi
           
           # Final check
           if [ ! -f "./release/*.aab" ]; then
-            echo "No AAB file found after searching all workflow runs"
+            echo "ERROR: No AAB file found after searching all workflow runs"
             exit 1
           fi
           
