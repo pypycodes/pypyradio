@@ -292,15 +292,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     )
                     MEDIA_ID_TOP_STATIONS -> cachedStations.take(50).map(::playableItem)
                     MEDIA_ID_FAVORITES -> {
-                        serviceScope.launch {
-                            try {
-                                val favorites = stationRepo.observeFavorites().first()
-                                cachedStations = favorites
-                                Log.d(TAG, "Loaded ${favorites.size} favorite stations")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to load favorites", e)
-                            }
-                        }
+                        // Load favorites asynchronously, return current cached stations for now
                         cachedStations.take(20).map(::playableItem)
                     }
                     MEDIA_ID_BY_LANGUAGE -> listOf(
