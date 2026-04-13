@@ -463,11 +463,15 @@ jobs:
           END_TIME=$((START_TIME + TIMEOUT))
           
           while [ $(date +%s) -lt $END_TIME ]; do
-            # Count approvals
-            APPROVALS=$(gh issue view $ISSUE_NUMBER --json comments --jq '.comments[] | select(.body | test("approve", "i")) | .author.login' | wc -l)
+            # Count approvals using GitHub API
+            APPROVALS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" | \
+              jq '[.[] | select(.body | test("approve", "i"))] | length')
             
-            # Count rejections
-            REJECTIONS=$(gh issue view $ISSUE_NUMBER --json comments --jq '.comments[] | select(.body | test("reject", "i")) | .author.login' | wc -l)
+            # Count rejections using GitHub API
+            REJECTIONS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" | \
+              jq '[.[] | select(.body | test("reject", "i"))] | length')
             
             echo "Current approvals: $APPROVALS (minimum: $MIN_APPROVALS)"
             echo "Current rejections: $REJECTIONS"
@@ -489,7 +493,10 @@ jobs:
             # Auto-approve for testing
             if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
               echo "Auto-approving for testing..."
-              gh issue comment $ISSUE_NUMBER --body "Auto-approved for testing purposes"
+              curl -s -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+                -d '{"body":"Auto-approved for testing purposes"}'
               echo "approved=true" >> $GITHUB_OUTPUT
               echo "approval_count=1" >> $GITHUB_OUTPUT
               exit 0
@@ -501,8 +508,6 @@ jobs:
           echo "Timeout reached"
           echo "approved=false" >> $GITHUB_OUTPUT
           echo "approval_count=$APPROVALS" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Job 5: Execute promotion
   execute-promotion:
