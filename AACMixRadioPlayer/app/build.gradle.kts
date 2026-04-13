@@ -131,8 +131,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // AndroidX Car App (for Android Auto UI)
-    implementation("androidx.car.app:app:1.4.0")
+    // AndroidX Car App (for Android Auto UI) - temporarily disabled due to SSL issues
+    // implementation("androidx.car.app:app:1.4.0")
 
     // Media3 (ExoPlayer + MediaSession)
     val media3Version = "1.2.1"
