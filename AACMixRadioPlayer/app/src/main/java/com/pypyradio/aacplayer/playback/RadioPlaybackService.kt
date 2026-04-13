@@ -20,7 +20,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
-import androidx.os.Bundle
+import android.os.Bundle
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -158,11 +158,11 @@ class RadioPlaybackService : MediaLibraryService() {
                     listOf(
                         androidx.media3.session.CommandButton.Builder()
                             .setDisplayName("Previous")
-                            .setSessionCommand(SessionCommand(0, "COMMAND_SKIP_PREV"))
+                            .setSessionCommand(SessionCommand("COMMAND_SKIP_PREV"))
                             .build(),
                         androidx.media3.session.CommandButton.Builder()
                             .setDisplayName("Next")
-                            .setSessionCommand(SessionCommand(1, "COMMAND_SKIP_NEXT"))
+                            .setSessionCommand(SessionCommand("COMMAND_SKIP_NEXT"))
                             .build()
                     )
                 )
@@ -306,7 +306,7 @@ class RadioPlaybackService : MediaLibraryService() {
                     MEDIA_ID_FAVORITES -> {
                         serviceScope.launch {
                             try {
-                                val favorites = stationRepo.observeFavorites().first()
+                                val favorites = kotlinx.coroutines.runBlocking { stationRepo.observeFavorites().first() }
                                 cachedStations = favorites
                                 Log.d(TAG, "Loaded ${favorites.size} favorite stations")
                             } catch (e: Exception) {
@@ -537,7 +537,7 @@ class RadioPlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
             command: SessionCommand,
-            args: Bundle
+            args: Bundle?
         ): ListenableFuture<SessionResult> {
             Log.d(TAG, "onCustomCommand: ${command.customAction}")
             return when (command.customAction) {
@@ -647,7 +647,7 @@ class RadioPlaybackService : MediaLibraryService() {
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
                 Log.w(TAG, "Buffering timeout - treating as error")
-                handlePlaybackError(PlaybackException(0, "Buffering timeout - station may be dead", Bundle.EMPTY))
+                handlePlaybackError(RuntimeException("Buffering timeout - station may be dead"))
             }
         }
     }
@@ -657,7 +657,7 @@ class RadioPlaybackService : MediaLibraryService() {
         bufferingTimeoutJob = null
     }
     
-    private fun handlePlaybackError(error: PlaybackException) {
+    private fun handlePlaybackError(error: Exception) {
         if (isAutoSkipping) {
             Log.d(TAG, "Already auto-skipping, ignoring error")
             return
