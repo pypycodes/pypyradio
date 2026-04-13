@@ -450,14 +450,20 @@ jobs:
             fi
           fi
           
-          # Final check
-          if [ ! -f "./release/*.aab" ]; then
+          # Final check - ensure we have an AAB file (any version is fine for testing)
+          AAB_COUNT=$(find ./release -name "*.aab" | wc -l)
+          if [ "$AAB_COUNT" -eq 0 ]; then
             echo "ERROR: No AAB file found after searching all workflow runs"
             exit 1
           fi
           
           echo "AAB file found successfully"
           ls -la ./release/*.aab
+          
+          # Show which version we're actually using
+          ACTUAL_AAB=$(find ./release -name "*.aab" | head -1)
+          ACTUAL_VERSION=$(basename "$ACTUAL_AAB" | sed 's/pypyradio-//' | sed 's/.aab//')
+          echo "NOTE: Using AAB version: $ACTUAL_VERSION (requested: $VERSION)"
 
       - name: Promote to target track
         uses: r0adkll/upload-google-play@v1
