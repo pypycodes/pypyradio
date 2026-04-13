@@ -137,6 +137,11 @@ jobs:
           ```
           "
           
+          # Create labels if they don't exist
+          gh label create "v$VERSION" --color "0052cc" --description "Version v$VERSION" 2>/dev/null || true
+          gh label create "closed-testing" --color "ff6b6b" --description "Closed testing release" 2>/dev/null || true
+          gh label create "released" --color "51cf66" --description "Released to testing" 2>/dev/null || true
+          
           # Create tracking issue
           ISSUE_URL=$(gh issue create \
             --title "Closed Testing: v$VERSION Released" \
