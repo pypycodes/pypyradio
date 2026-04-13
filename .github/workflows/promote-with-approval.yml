@@ -96,9 +96,17 @@ jobs:
           # Use specified version or latest
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
+            # Remove 'v' prefix if present
+            VERSION=$(echo "$VERSION" | sed 's/^v//')
+            echo "Using specified version: $VERSION"
           else
             VERSION="$LATEST_VERSION"
+            echo "Using latest version: $VERSION"
           fi
+          
+          # Debug: Show what we're working with
+          echo "DEBUG: Track=$TRACK, Version=$VERSION, Latest=$LATEST_VERSION"
+          echo "DEBUG: Input version='${{ github.event.inputs.version }}'"
           
           # Validate release sequence
           if [ "$TRACK" = "beta" ]; then
