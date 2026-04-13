@@ -20,6 +20,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import androidx.os.Bundle
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -157,13 +158,11 @@ class RadioPlaybackService : MediaLibraryService() {
                     listOf(
                         androidx.media3.session.CommandButton.Builder()
                             .setDisplayName("Previous")
-                            .setSessionCommand(SessionCommand("COMMAND_SKIP_PREV"))
-                            .setIcon(androidx.media3.common.C.ICON_SKIP_PREVIOUS)
+                            .setSessionCommand(SessionCommand(0, "COMMAND_SKIP_PREV"))
                             .build(),
                         androidx.media3.session.CommandButton.Builder()
                             .setDisplayName("Next")
-                            .setSessionCommand(SessionCommand("COMMAND_SKIP_NEXT"))
-                            .setIcon(androidx.media3.common.C.ICON_SKIP_NEXT)
+                            .setSessionCommand(SessionCommand(1, "COMMAND_SKIP_NEXT"))
                             .build()
                     )
                 )
@@ -538,7 +537,7 @@ class RadioPlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
             command: SessionCommand,
-            args: androidx.media3.common.Bundle
+            args: Bundle
         ): ListenableFuture<SessionResult> {
             Log.d(TAG, "onCustomCommand: ${command.customAction}")
             return when (command.customAction) {
@@ -648,7 +647,7 @@ class RadioPlaybackService : MediaLibraryService() {
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
                 Log.w(TAG, "Buffering timeout - treating as error")
-                handlePlaybackError(PlaybackException("Buffering timeout - station may be dead"))
+                handlePlaybackError(PlaybackException(0, "Buffering timeout - station may be dead", Bundle.EMPTY))
             }
         }
     }
