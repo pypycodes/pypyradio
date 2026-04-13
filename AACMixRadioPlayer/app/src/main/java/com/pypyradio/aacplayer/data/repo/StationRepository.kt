@@ -40,6 +40,65 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
             .take(limit)
     }
 
+    /**
+     * Get filtered AAC stations with verified status, English/India preference, and quality sorting
+     * This is the main method used by Android Auto for high-quality stations
+     */
+    suspend fun getFilteredAacStations(limit: Int = 500): List<Station> {
+        val api = RadioBrowserClient.api()
+        
+        // Fetch more stations to account for filtering
+        val allStations = mutableListOf<StationDto>()
+        
+        try {
+            // Get top voted stations (prioritized by clickcount/popularity)
+            val topStations = api.topVoted(limit * 3)
+            allStations.addAll(topStations)
+        } catch (e: Exception) {
+            // Fallback to search if topVoted fails
+            val searchResults = api.searchStations(
+                name = null,
+                codec = "aac",
+                hideBroken = true,
+                limit = limit * 3,
+                order = "clickcount",
+                reverse = true
+            )
+            allStations.addAll(searchResults)
+        }
+        
+        return allStations
+            // Strict verification: only stations verified as working
+            .filter { it.lastCheckOk == 1 }
+            // Must have valid URL
+            .filter { !it.urlResolved.isNullOrBlank() || !it.url.isNullOrBlank() }
+            // AAC/AAC+ codec preference (prioritize AAC over MP3)
+            .filter { it.codec?.lowercase() in listOf("aac", "aac+", "he-aac", "xheaac") }
+            // Language and country filtering (English and India)
+            .filter { station ->
+                val language = station.language?.lowercase()
+                val countryCode = station.countryCode?.lowercase()
+                val tags = station.tags?.lowercase()
+                
+                // Include English stations from any country
+                language == "english" ||
+                // Include Indian stations (any language)
+                countryCode == "in" ||
+                // Include stations tagged with India
+                tags?.contains("india") == true
+            }
+            // Convert to domain model
+            .map { it.toDomain() }
+            // Sort by quality (bitrate, then clickcount proxy)
+            .sortedWith(compareByDescending<Station> { it.bitrate ?: 0 }
+                .thenByDescending { it.tags?.contains("popular") == true }
+                .thenBy { it.name })
+            // Remove duplicates by name, keeping highest bitrate
+            .deduplicateByHighestBitrate()
+            // Take the requested limit
+            .take(limit)
+    }
+
     suspend fun searchAac(name: String, limit: Int = 200): List<Station> {
         val api = RadioBrowserClient.api()
         val result = api.searchStations(
@@ -220,5 +279,29 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
             .map { (_, stations) -> 
                 stations.maxByOrNull { it.bitrate ?: 0 } ?: stations.first()
             }
+    }
+
+    /**
+     * Get recommended high-quality stations that are always reachable
+     */
+    suspend fun getRecommendedStations(limit: Int = 20): List<Station> {
+        return getFilteredAacStations(limit * 2)
+            .filter { station ->
+                // Additional quality filters for recommendations
+                val bitrate = station.bitrate ?: 0
+                val name = station.name.lowercase()
+                val tags = station.tags?.lowercase() ?: ""
+                
+                // Prefer higher bitrate stations (128kbps+)
+                bitrate >= 128 &&
+                // Exclude test stations
+                !name.contains("test") &&
+                // Prefer established stations
+                (tags.contains("bbc") || tags.contains("npr") || 
+                 tags.contains("mirchi") || tags.contains("radio") ||
+                 name.contains("bbc") || name.contains("npr") || 
+                 name.contains("mirchi") || name.contains("times"))
+            }
+            .take(limit)
     }
 }
