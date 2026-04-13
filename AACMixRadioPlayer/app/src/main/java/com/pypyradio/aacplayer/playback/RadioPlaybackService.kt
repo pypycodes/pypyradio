@@ -1,19 +1,4 @@
-> Task :app:bundleReleaseResources
-e: file:///home/runner/work/pypyradio/pypyradio/AACMixRadioPlayer/app/src/main/java/com/pypyradio/aacplayer/playback/RadioPlaybackService.kt:787:1 Expecting a top level declaration
-> Task :app:kspReleaseKotlin FAILED
-37 actionable tasks: 37 executed
-FAILURE: Build failed with an exception.
-* What went wrong:
-Execution failed for task ':app:kspReleaseKotlin'.
-> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
-   > Compilation error. See log for more details
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-> Get more help at https://help.gradle.org.
-BUILD FAILED in 1m 50s
-Error: Process completed with exit code 1.package com.pypyradio.aacplayer.playback
+package com.pypyradio.aacplayer.playback
 
 import android.app.PendingIntent
 import android.content.Context
