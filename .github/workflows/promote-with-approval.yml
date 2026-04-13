@@ -340,12 +340,20 @@ jobs:
         run: |
           VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
           
-          # Find the release workflow run
-          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=10 --json databaseId,headBranch,status,conclusion --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
+          # Find the release workflow run that matches the version
+          echo "Searching for workflow run for v$VERSION..."
+          
+          # Get recent workflow runs and find the one that created the v$VERSION tag
+          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=20 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
           
           if [ -n "$WORKFLOW_RUN" ]; then
             echo "Found workflow run: $WORKFLOW_RUN"
             echo "workflow_run_id=$WORKFLOW_RUN" >> $GITHUB_OUTPUT
+            
+            # Check if this workflow run created the right tag
+            echo "Verifying workflow run created v$VERSION..."
+            WORKFLOW_INFO=$(gh run view $WORKFLOW_RUN --json headBranch,status,conclusion,createdAt)
+            echo "Workflow info: $WORKFLOW_INFO"
           else
             echo "No completed release workflow found"
             exit 1
@@ -366,12 +374,55 @@ jobs:
           echo "Downloaded files:"
           ls -la ./release/
           
+          VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
+          
+          # Check for AAB file with correct version
+          AAB_FILE=$(find ./release -name "*$VERSION*.aab" | head -1)
+          if [ -f "$AAB_FILE" ]; then
+            echo "Found correct AAB file: $AAB_FILE"
+          else
+            # Check for any AAB file
+            ANY_AAB=$(find ./release -name "*.aab" | head -1)
+            if [ -f "$ANY_AAB" ]; then
+              echo "Found AAB file but wrong version: $ANY_AAB"
+              echo "Expected version: $VERSION"
+              echo "This AAB is from an older build, searching for newer workflow..."
+              
+              # Try to find a more recent workflow run
+              WORKFLOW_RUNS=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=5 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId')
+              
+              for RUN_ID in $WORKFLOW_RUNS; do
+                echo "Checking workflow run $RUN_ID..."
+                # Download artifacts from this run
+                rm -rf ./release/*
+                dawidd6/action-download-artifact@v3 \
+                  --github-token ${{ secrets.GITHUB_TOKEN }} \
+                  --run-id $RUN_ID \
+                  --name release-aab \
+                  --path ./release
+                
+                # Check if this has the right version
+                CORRECT_AAB=$(find ./release -name "*$VERSION*.aab" | head -1)
+                if [ -f "$CORRECT_AAB" ]; then
+                  echo "Found correct AAB in workflow run $RUN_ID: $CORRECT_AAB"
+                  echo "workflow_run_id=$RUN_ID" >> $GITHUB_OUTPUT
+                  break
+                fi
+              done
+            else
+              echo "No AAB file found in release artifacts"
+              exit 1
+            fi
+          fi
+          
+          # Final check
           if [ ! -f "./release/*.aab" ]; then
-            echo "No AAB file found in release artifacts"
+            echo "No AAB file found after searching all workflow runs"
             exit 1
           fi
           
           echo "AAB file found successfully"
+          ls -la ./release/*.aab
 
       - name: Promote to target track
         uses: r0adkll/upload-google-play@v1
