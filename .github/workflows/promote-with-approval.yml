@@ -11,19 +11,10 @@ on:
         options:
           - beta
           - production
-          - closed
-      rollout_percentage:
-        description: 'Rollout percentage (for production)'
+      version:
+        description: 'Version to promote (optional, defaults to latest)'
         required: false
-        default: '10'
-        type: choice
-        options:
-          - '1'
-          - '5'
-          - '10'
-          - '20'
-          - '50'
-          - '100'
+        type: string
       auto_approve:
         description: 'Auto-approve (for testing only)'
         required: false
@@ -100,8 +91,14 @@ jobs:
         id: create-request
         run: |
           TRACK="${{ github.event.inputs.track }}"
-          ROLLOUT="${{ github.event.inputs.rollout_percentage }}"
           LATEST_VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
+          
+          # Use specified version or latest
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="$LATEST_VERSION"
+          fi
           
           # Generate approval ID
           APPROVAL_ID="promote-${LATEST_VERSION}-to-${TRACK}-$(date +%s)"
@@ -111,7 +108,7 @@ jobs:
           
           **Version:** v$LATEST_VERSION
           **Target Track:** $TRACK
-          **Rollout:** ${{ github.event.inputs.track == 'production' && format('%s%%', github.event.inputs.rollout_percentage) || 'N/A' }}
+          **Rollout:** 100%
           **Approval ID:** $APPROVAL_ID
           **Requested by:** ${{ github.actor }}
           **Requested at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
@@ -152,7 +149,6 @@ jobs:
           ISSUE_URL=$(gh issue create \
             --title "Approval: Promote v$LATEST_VERSION to $TRACK" \
             --body "$ISSUE_BODY" \
-            --label "approval-request" \
             --label "v$LATEST_VERSION" \
             --label "promote-to-$TRACK" \
             --label "${{ github.event.inputs.auto_approve == 'true' && 'auto-approve' || '' }}" \
@@ -306,7 +302,7 @@ jobs:
           status: completed
           releaseName: "${{ needs.fetch-versions.outputs.latest_version }} - Promoted to ${{ github.event.inputs.track }}"
           whatsNewDirectory: whatsnew
-          rollout: ${{ github.event.inputs.track == 'production' && github.event.inputs.rollout_percentage || '' }}
+          rollout: 100
 
       - name: Update approval issue
         run: |
@@ -323,7 +319,7 @@ jobs:
           **Promoted by:** ${{ github.actor }}
           **Promoted at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
-          ${{ github.event.inputs.track == 'production' && format('**Rollout:** %s%%', github.event.inputs.rollout_percentage) || '' }}
+          **Rollout:** 100%
           
           This promotion request has been completed successfully."
           
@@ -336,7 +332,7 @@ jobs:
         run: |
           VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
           TRACK="${{ github.event.inputs.track }}"
-          ROLLOUT="${{ github.event.inputs.rollout_percentage }}"
+          ROLLOUT="100"
           
           # Update GitHub release with promotion info
           gh release edit "v$VERSION" \
@@ -346,7 +342,7 @@ jobs:
           ## Promotion Complete
           
           **Track:** $TRACK
-          ${{ github.event.inputs.track == 'production' && format('**Rollout:** %s%%', github.event.inputs.rollout_percentage) || '' }}
+          **Rollout:** 100%
           **Promoted by:** ${{ github.actor }}
           **Promoted at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" \
             --latest
