@@ -357,11 +357,27 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> {
-                        if (cachedStations.isEmpty()) {
-                            // Return loading placeholder or try to load stations synchronously
-                            loadStationsSync()
+                        // Load high-quality stations using enhanced filtering
+                        val topStations = runBlocking {
+                            try {
+                                // Combine English and Indian stations for FOR YOU
+                                val englishStations = stationRepo.getEnglishStations(25)
+                                val indianStations = stationRepo.getIndianStations(25)
+                                (englishStations + indianStations)
+                                    .sortedWith(compareByDescending<Station> { it.bitrate ?: 0 }
+                                        .thenByDescending { it.tags?.contains("popular") == true }
+                                        .thenBy { it.name })
+                                    .take(50)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to load top stations", e)
+                                // Fallback to cached stations
+                                if (cachedStations.isEmpty()) {
+                                    loadStationsSync()
+                                }
+                                cachedStations.take(50)
+                            }
                         }
-                        cachedStations.take(50).map(::playableItem)
+                        topStations.map(::playableItem)
                     }
                     MEDIA_ID_FAVORITES -> {
                         // Load actual favorites from database
@@ -522,9 +538,25 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             return@mapNotNull null
                         }
                         
-                        // Check if it's a station (check both general cache and favorites)
-                        val station = cachedStations.find { it.stationuuid == mediaId } 
+                        // Check if it's a station (check all possible sources)
+                        var station = cachedStations.find { it.stationuuid == mediaId } 
                             ?: cachedFavorites.find { it.stationuuid == mediaId }
+                        
+                        // If not found in caches, try to load it dynamically
+                        if (station == null) {
+                            station = runBlocking {
+                                try {
+                                    // Try to find in English stations
+                                    val englishStations = stationRepo.getEnglishStations(200)
+                                    englishStations.find { it.stationuuid == mediaId }
+                                        ?: // Try to find in Indian stations
+                                        stationRepo.getIndianStations(200).find { it.stationuuid == mediaId }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to resolve station $mediaId", e)
+                                    null
+                                }
+                            }
+                        }
                         if (station != null) {
                             // Validate station before creating media item
                             if (isValidStation(station)) {
