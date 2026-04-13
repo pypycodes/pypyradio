@@ -352,7 +352,8 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     MEDIA_ID_ROOT -> listOf(
                         browsableItem(MEDIA_ID_TOP_STATIONS, "Top Stations"),
                         browsableItem(MEDIA_ID_FAVORITES, "Favorites"),
-                        browsableItem(MEDIA_ID_BY_LANGUAGE, "By Language"),
+                        browsableItem(MEDIA_ID_ENGLISH, "English Stations"),
+                        browsableItem(MEDIA_ID_HINDI, "Indian Stations"),
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> {
@@ -367,44 +368,26 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         val favorites = loadFavoritesSync()
                         favorites.map(::playableItem)
                     }
-                    MEDIA_ID_BY_LANGUAGE -> listOf(
-                        browsableItem(MEDIA_ID_ENGLISH, "English"),
-                        browsableItem(MEDIA_ID_HINDI, "Hindi")
-                    )
-                    MEDIA_ID_ENGLISH -> {
-                        if (cachedStations.isEmpty()) {
-                            loadStationsSync()
+                                        MEDIA_ID_ENGLISH -> {
+                        val englishStations = runBlocking {
+                            try {
+                                stationRepo.getEnglishStations(50)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to load English stations", e)
+                                emptyList()
+                            }
                         }
-                        cachedStations
-                            .filter { it.language?.lowercase() == "english" }
-                            .map(::playableItem)
+                        englishStations.map(::playableItem)
                     }
                     MEDIA_ID_HINDI -> {
-                        if (cachedStations.isEmpty()) {
-                            loadStationsSync()
-                        }
-                        // Debug: Log available languages
-                        val availableLanguages = cachedStations.mapNotNull { it.language }.distinct()
-                        Log.d(TAG, "Available languages: $availableLanguages")
-                        
-                        val hindiStations = cachedStations.filter { it.language?.lowercase() == "hindi" }
-                        Log.d(TAG, "Found ${hindiStations.size} Hindi stations")
-                        
-                        // If no Hindi stations, try other Indian languages
-                        val indianStations = if (hindiStations.isEmpty()) {
-                            cachedStations.filter { station ->
-                                station.language?.lowercase()?.let { lang ->
-                                    lang.contains("hindi") || lang.contains("indian") || 
-                                    lang.contains("bengali") || lang.contains("tamil") ||
-                                    lang.contains("telugu") || lang.contains("marathi") ||
-                                    lang.contains("gujarati") || lang.contains("punjabi")
-                                } == true
+                        val indianStations = runBlocking {
+                            try {
+                                stationRepo.getIndianStations(50)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to load Indian stations", e)
+                                emptyList()
                             }
-                        } else {
-                            hindiStations
                         }
-                        
-                        Log.d(TAG, "Found ${indianStations.size} Indian language stations")
                         indianStations.map(::playableItem)
                     }
                     MEDIA_ID_PODCASTS -> {
