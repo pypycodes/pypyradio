@@ -139,9 +139,17 @@ jobs:
           APPROVAL_ID="promote-${VERSION}-to-${TRACK}-$(date +%s)"
           
           # Create labels if they don't exist
-          gh label create "v$VERSION" --color "0052cc" --description "Version v$VERSION" 2>/dev/null || true
-          gh label create "promote-to-$TRACK" --color "ffa500" --description "Promotion to $TRACK track" 2>/dev/null || true
-          gh label create "auto-approve" --color "ff0000" --description "Auto-approved for testing" 2>/dev/null || true
+          echo "Creating labels..."
+          gh label create "v$VERSION" --color "0052cc" --description "Version v$VERSION" || echo "Label v$VERSION already exists or failed to create"
+          gh label create "promote-to-$TRACK" --color "ffa500" --description "Promotion to $TRACK track" || echo "Label promote-to-$TRACK already exists or failed to create"
+          if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
+            gh label create "auto-approve" --color "ff0000" --description "Auto-approved for testing" || echo "Label auto-approve already exists or failed to create"
+          fi
+          
+          # Verify labels exist before creating issue
+          echo "Verifying labels exist..."
+          LABELS_CHECK=$(gh label list --search "v$VERSION" --limit 1 --json name --jq '.[].name')
+          echo "Found labels for v$VERSION: $LABELS_CHECK"
           
           # Create approval issue
           ISSUE_BODY="## Promotion Approval Request
