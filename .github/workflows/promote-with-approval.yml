@@ -369,6 +369,30 @@ jobs:
           name: release-aab
           path: ./release
 
+      - name: Rename AAB to requested version
+        run: |
+          echo "Renaming AAB file to match requested version..."
+          VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
+          
+          # Find the downloaded AAB file
+          DOWNLOADED_AAB=$(find ./release -name "*.aab" | head -1)
+          
+          if [ -f "$DOWNLOADED_AAB" ]; then
+            echo "Found downloaded AAB: $DOWNLOADED_AAB"
+            
+            # Create the new filename
+            NEW_AAB="./release/pypyradio-$VERSION.aab"
+            
+            # Rename the file
+            mv "$DOWNLOADED_AAB" "$NEW_AAB"
+            
+            echo "Renamed to: $NEW_AAB"
+            ls -la ./release/
+          else
+            echo "No AAB file found to rename"
+            exit 1
+          fi
+
       - name: Verify downloaded AAB
         run: |
           echo "Downloaded files:"
