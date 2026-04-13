@@ -232,6 +232,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 stationRepo.observeFavorites().first()
             }
             Log.d(TAG, "Loaded ${favorites.size} favorites from database")
+            // Debug: Log favorite station details
+            favorites.forEach { station ->
+                Log.d(TAG, "Favorite: ${station.name}, url: ${station.urlResolved}, country: ${station.countryCode}, tags: ${station.tags}")
+            }
             // Update cached favorites for consistency
             cachedFavorites = favorites
             favorites
@@ -594,9 +598,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 .setUri(station.urlResolved)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(station.name)
-                        .setArtist(station.countryCode ?: "")
+                        .setTitle(station.name ?: "Unknown Station")
+                        .setArtist(station.countryCode ?: "Unknown")
                         .setGenre(station.tags ?: "Radio")
+                        .setAlbumTitle(station.language?.let { "$it Radio" } ?: "Radio")
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
                         .build()
