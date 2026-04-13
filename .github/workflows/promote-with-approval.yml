@@ -76,9 +76,9 @@ jobs:
           echo "Final versions list:"
           echo "$VERSIONS"
           
-          # Convert to JSON format
-          VERSIONS_JSON=$(echo "$VERSIONS" | jq -R -s 'split("\n") | map(select(length > 0))')
-          LATEST_VERSION=$(echo "$VERSIONS" | head -1)
+          # Convert to JSON format (simpler approach)
+          VERSIONS_JSON=$(echo "$VERSIONS" | sed '/^$/d' | jq -R . | jq -s .)
+          LATEST_VERSION=$(echo "$VERSIONS" | head -1 | tr -d '\n\r')
           
           echo "versions=$VERSIONS_JSON" >> $GITHUB_OUTPUT
           echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
