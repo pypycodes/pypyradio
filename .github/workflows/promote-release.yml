@@ -39,36 +39,70 @@ jobs:
           fi
           echo "Valid version: $VERSION"
 
-      - name: Get Release Info from Google Play
-        id: get-release
+      - name: Download AAB from Previous Build
         run: |
-          # Get the latest release from Internal Testing track
-          echo "Fetching release info for version ${{ github.event.inputs.version }}..."
+          # Download the AAB from the previous release build artifacts
+          VERSION="${{ github.event.inputs.version }}"
           
-          # This would typically use Google Play Developer API
-          # For now, we'll simulate getting the AAB from the previous build
+          # Use GitHub API to get the workflow run that created the release
+          echo "Finding release build for v$VERSION..."
+          
+          # Get the release workflow run for this version
+          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=10 --json databaseId,headBranch,status,conclusion --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
+          
+          if [ -n "$WORKFLOW_RUN" ]; then
+            echo "Found workflow run: $WORKFLOW_RUN"
+            echo "workflow_run_id=$WORKFLOW_RUN" >> $GITHUB_OUTPUT
+          else
+            echo "No completed release workflow found"
+            exit 1
+          fi
+        id: find-workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Release Artifacts
+        if: steps.find-workflow.outputs.workflow_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          workflow: 'Build and Release Android App.yml'
+          run-id: ${{ steps.find-workflow.outputs.workflow_run_id }}
+          name: release-aab
+          path: ./release
+
+      - name: Verify Downloaded AAB
+        run: |
+          echo "Downloaded files:"
+          ls -la ./release/
+          
+          if [ ! -f "./release/*.aab" ]; then
+            echo "No AAB file found in release artifacts"
+            exit 1
+          fi
+          
+          echo "AAB file found successfully"
           echo "release_found=true" >> $GITHUB_OUTPUT
-          echo "package_name=com.pypyradio.aacplayer" >> $GITHUB_OUTPUT
+        id: verify-release
 
       - name: Promote to Non-Production Track
-        if: steps.get-release.outputs.release_found == 'true' && github.event.inputs.track != 'production'
+        if: steps.verify-release.outputs.release_found == 'true' && github.event.inputs.track != 'production'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.pypyradio.aacplayer
-          releaseFiles: ""  # Empty since we're promoting existing release
+          releaseFiles: "./release/*.aab"
           track: ${{ github.event.inputs.track }}
           status: completed
           releaseName: "${{ github.event.inputs.version }} - Promoted to ${{ github.event.inputs.track }}"
           whatsNewDirectory: whatsnew
 
       - name: Promote to Production with Rollout
-        if: steps.get-release.outputs.release_found == 'true' && github.event.inputs.track == 'production'
+        if: steps.verify-release.outputs.release_found == 'true' && github.event.inputs.track == 'production'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.pypyradio.aacplayer
-          releaseFiles: ""  # Empty since we're promoting existing release
+          releaseFiles: "./release/*.aab"
           track: production
           status: completed
           releaseName: "${{ github.event.inputs.version }} - Promoted to Production (${{ github.event.inputs.rollout_percentage }}% rollout)"
@@ -76,7 +110,7 @@ jobs:
           rollout: ${{ github.event.inputs.rollout_percentage }}
 
       - name: Update GitHub Release Status
-        if: steps.get-release.outputs.release_found == 'true'
+        if: steps.verify-release.outputs.release_found == 'true'
         run: |
           # Update the GitHub release to mark it as promoted
           VERSION="${{ github.event.inputs.version }}"
