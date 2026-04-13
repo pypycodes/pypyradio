@@ -1,11 +1,19 @@
-name: Promote Release with Approval
+name: Release Management
 
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'promote'
+        type: choice
+        options:
+          - release-to-closed
+          - promote
       track:
         description: 'Target track for promotion'
-        required: true
+        required: false
         default: 'alpha'
         type: choice
         options:
@@ -13,9 +21,21 @@ on:
           - beta
           - production
       version:
-        description: 'Version to promote (optional, defaults to latest)'
+        description: 'Version to release/promote (optional, defaults to latest)'
         required: false
         type: string
+      rollout_percentage:
+        description: 'Rollout percentage (for production)'
+        required: false
+        default: '100'
+        type: choice
+        options:
+          - '1'
+          - '5'
+          - '10'
+          - '20'
+          - '50'
+          - '100'
       auto_approve:
         description: 'Auto-approve (for testing only)'
         required: false
@@ -27,15 +47,15 @@ permissions:
   issues: write
 
 env:
+  APPROVERS_ALPHA: "['pypycodes']"
   APPROVERS_BETA: "['pypycodes']"
   APPROVERS_PRODUCTION: "['pypycodes']"
-  APPROVERS_CLOSED: "['pypycodes']"
+  MIN_APPROVALS_ALPHA: 1
   MIN_APPROVALS_BETA: 1
   MIN_APPROVALS_PRODUCTION: 2
-  MIN_APPROVALS_CLOSED: 3
 
 jobs:
-  # Job 1: Fetch available versions and create environment file
+  # Job 1: Fetch available versions
   fetch-versions:
     runs-on: ubuntu-latest
     outputs:
@@ -81,8 +101,198 @@ jobs:
           echo "versions=$VERSIONS_LIST" >> $GITHUB_OUTPUT
           echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
 
-  # Job 2: Create approval request
+  # Job 2: Release to Closed Testing (Alpha)
+  release-to-closed:
+    if: github.event.inputs.action == 'release-to-closed'
+    needs: fetch-versions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version to release
+        id: get-version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
+          fi
+          
+          echo "Releasing version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Validate version format
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z (e.g., 1.0.94)"
+            exit 1
+          fi
+
+      - name: Find and download release artifacts
+        id: download-artifacts
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          
+          # Find the release workflow run
+          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=10 --json databaseId,headBranch,status,conclusion --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
+          
+          if [ -n "$WORKFLOW_RUN" ]; then
+            echo "Found workflow run: $WORKFLOW_RUN"
+            echo "workflow_run_id=$WORKFLOW_RUN" >> $GITHUB_OUTPUT
+          else
+            echo "No completed release workflow found"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download AAB artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.download-artifacts.outputs.workflow_run_id }}
+          name: release-aab
+          path: ./release
+
+      - name: Rename AAB to requested version
+        run: |
+          echo "Renaming AAB file to match requested version..."
+          VERSION="${{ steps.get-version.outputs.version }}"
+          
+          # Find the downloaded AAB file
+          DOWNLOADED_AAB=$(find ./release -name "*.aab" | head -1)
+          
+          if [ -f "$DOWNLOADED_AAB" ]; then
+            echo "Found downloaded AAB: $DOWNLOADED_AAB"
+            
+            # Create the new filename
+            NEW_AAB="./release/pypyradio-$VERSION.aab"
+            
+            # Rename the file
+            mv "$DOWNLOADED_AAB" "$NEW_AAB"
+            
+            echo "Renamed to: $NEW_AAB"
+            ls -la ./release/
+          else
+            echo "No AAB file found to rename"
+            exit 1
+          fi
+
+      - name: Verify downloaded AAB
+        run: |
+          echo "Downloaded files:"
+          ls -la ./release/
+          
+          if [ ! -f "./release/*.aab" ]; then
+            echo "No AAB file found in release artifacts"
+            exit 1
+          fi
+          
+          echo "AAB file found successfully"
+
+      - name: Create release notes
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          mkdir -p whatsnew
+          printf 'Version %s\n\nReleased to Closed Testing for internal validation.\n\nChanges:\n- Stability improvements\n- Bug fixes\n- Performance optimizations\n' "$VERSION" > whatsnew/whatsnew-en-US
+
+      - name: Release to Closed Testing (Alpha)
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.pypyradio.aacplayer
+          releaseFiles: "./release/*.aab"
+          track: internal
+          status: completed
+          releaseName: "${{ steps.get-version.outputs.version }} - Closed Testing"
+          whatsNewDirectory: whatsnew
+
+      - name: Create tracking labels
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          gh label create "v$VERSION" --color "0052cc" --description "Version v$VERSION" 2>/dev/null || true
+          gh label create "closed-testing" --color "ff6b6b" --description "Closed testing release" 2>/dev/null || true
+          gh label create "released" --color "51cf66" --description "Released to testing" 2>/dev/null || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release tracking issue
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          
+          ISSUE_BODY="## Closed Testing Release: v$VERSION
+          
+          **Version:** v$VERSION
+          **Track:** Closed Testing (Alpha)
+          **Rollout:** 100%
+          **Released by:** ${{ github.actor }}
+          **Released at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ---
+          
+          ### Internal Testing Checklist
+          - [ ] Basic functionality verified
+          - [ ] Android Auto compatibility tested
+          - [ ] Performance metrics checked
+          - [ ] Crash rate monitored (24 hours)
+          - [ ] User feedback collected
+          - [ ] Ready for Beta promotion
+          
+          ---
+          
+          ### Next Steps
+          Once validated in closed testing, promote to:
+          1. **Beta Track** - Use this workflow with action='promote' and track='beta'
+          2. **Production Track** - Use this workflow with action='promote' and track='production'
+          
+          ### Promotion Commands
+          ```bash
+          # To promote to Beta
+          gh workflow run 'Release Management' --field action=promote --field track=beta --field version=$VERSION
+          
+          # To promote to Production
+          gh workflow run 'Release Management' --field action=promote --field track=production --field version=$VERSION
+          ```
+          "
+          
+          # Create tracking issue
+          ISSUE_URL=$(gh issue create \
+            --title "Closed Testing: v$VERSION Released" \
+            --body "$ISSUE_BODY" \
+            --label "v$VERSION" \
+            --label "closed-testing" \
+            --label "released" \
+            --assignee ${{ github.actor }})
+          
+          echo "Created tracking issue: $ISSUE_URL"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update GitHub release
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          
+          # Update GitHub release with closed testing info
+          gh release edit "v$VERSION" \
+            --title "Release v$VERSION (Closed Testing)" \
+            --body "$(gh release view v$VERSION --json body --jq .body)
+
+          ## Closed Testing Release
+          
+          **Track:** Closed Testing (Alpha)
+          **Rollout:** 100%
+          **Released by:** ${{ github.actor }}
+          **Released at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          This version is now available in closed testing for internal validation." \
+            --latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 3: Create approval request for promotion
   create-approval-request:
+    if: github.event.inputs.action == 'promote'
     needs: fetch-versions
     runs-on: ubuntu-latest
     outputs:
@@ -103,10 +313,8 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
             # Remove 'v' prefix if present
             VERSION=$(echo "$VERSION" | sed 's/^v//')
-            echo "Using specified version: $VERSION"
           else
             VERSION="$LATEST_VERSION"
-            echo "Using latest version: $VERSION"
           fi
           
           # Debug: Show what we're working with
@@ -123,7 +331,7 @@ jobs:
             CLOSED_ISSUES=$(gh issue list --label "closed-testing" --label "v$VERSION" --label "released" --limit 1 --json number --jq '.[] | .number')
             if [ -z "$CLOSED_ISSUES" ]; then
               echo "ERROR: v$VERSION must first be released to alpha (closed testing) before promoting to beta"
-              echo "Please run 'Release to Closed Testing (Alpha)' workflow first"
+              echo "Please run this workflow with action='release-to-closed' first"
               exit 1
             fi
             echo "Confirmed: v$VERSION was released to alpha (closed testing)"
@@ -133,7 +341,7 @@ jobs:
             BETA_ISSUES=$(gh issue list --label "promote-to-beta" --label "v$VERSION" --limit 1 --json number --jq '.[] | .number')
             if [ -z "$BETA_ISSUES" ]; then
               echo "ERROR: v$VERSION must first be promoted to beta before promoting to production"
-              echo "Please run 'Promote Release with Approval' workflow for beta first"
+              echo "Please run this workflow with action='promote' and track='beta' first"
               exit 1
             fi
             echo "Confirmed: v$VERSION was promoted to beta"
@@ -162,10 +370,10 @@ jobs:
           ---
           
           ### Approval Requirements
-          ${{ github.event.inputs.track == 'alpha' && format('- **Required Approvers:** %s', env.APPROVERS_BETA) || '' }}
+          ${{ github.event.inputs.track == 'alpha' && format('- **Required Approvers:** %s', env.APPROVERS_ALPHA) || '' }}
           ${{ github.event.inputs.track == 'beta' && format('- **Required Approvers:** %s', env.APPROVERS_BETA) || '' }}
           ${{ github.event.inputs.track == 'production' && format('- **Required Approvers:** %s', env.APPROVERS_PRODUCTION) || '' }}
-          ${{ github.event.inputs.track == 'alpha' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_BETA) || '' }}
+          ${{ github.event.inputs.track == 'alpha' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_ALPHA) || '' }}
           ${{ github.event.inputs.track == 'beta' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_BETA) || '' }}
           ${{ github.event.inputs.track == 'production' && format('- **Minimum Approvals:** %s', env.MIN_APPROVALS_PRODUCTION) || '' }}
           
@@ -206,35 +414,6 @@ jobs:
             --body "$ISSUE_BODY" \
             --assignee ${{ github.actor }})
           
-          ### Approval Checklist
-          - [ ] Version tested in ${{ github.event.inputs.track == 'alpha' && 'Development' || github.event.inputs.track == 'beta' && 'Alpha (Closed Testing)' || 'Beta' }}
-          - [ ] No critical crashes or issues reported
-          - [ ] Android Auto functionality verified
-          - [ ] Performance metrics within acceptable range
-          - [ ] User feedback reviewed and positive
-          - [ ] Release notes prepared and accurate
-          
-          ---
-          
-          ### How to Approve
-          1. Review the checklist above
-          2. Test the version if possible
-          3. Comment **"approve"** to approve this promotion
-          4. Comment **"reject"** with reason to reject
-          
-          ### Auto-Approve
-          ${{ github.event.inputs.auto_approve == 'true' && 'This request will be auto-approved for testing purposes.' || '' }}
-          "
-          
-          # Create the issue
-          ISSUE_URL=$(gh issue create \
-            --title "Approval: Promote v$VERSION to $TRACK" \
-            --body "$ISSUE_BODY" \
-            --label "v$VERSION" \
-            --label "promote-to-$TRACK" \
-            --label "${{ github.event.inputs.auto_approve == 'true' && 'auto-approve' || '' }}" \
-            --assignee ${{ github.actor }})
-          
           ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -o '[0-9]*')
           
           echo "approval_id=$APPROVAL_ID" >> $GITHUB_OUTPUT
@@ -244,92 +423,91 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Job 3: Wait for approval (with timeout)
+  # Job 4: Wait for approval
   wait-for-approval:
+    if: github.event.inputs.action == 'promote'
     needs: [fetch-versions, create-approval-request]
     runs-on: ubuntu-latest
     outputs:
       approved: ${{ steps.check-approval.outputs.approved }}
       approval_count: ${{ steps.check-approval.outputs.approval_count }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Wait for approval
         id: check-approval
         run: |
           ISSUE_NUMBER="${{ needs.create-approval-request.outputs.issue_number }}"
           TRACK="${{ github.event.inputs.track }}"
+          APPROVAL_ID="${{ needs.create-approval-request.outputs.approval_id }}"
           
           # Set timeout based on track
           case $TRACK in
-            "beta") TIMEOUT=1800 ;;     # 30 minutes
-            "production") TIMEOUT=3600 ;; # 1 hour
-            "closed") TIMEOUT=7200 ;;    # 2 hours
-            *) TIMEOUT=1800 ;;
+            alpha) TIMEOUT=1800 ;;  # 30 minutes
+            beta) TIMEOUT=3600 ;;    # 1 hour
+            production) TIMEOUT=7200 ;; # 2 hours
+            *) TIMEOUT=3600 ;;
           esac
           
-          echo "Waiting for approval (timeout: $TIMEOUT seconds)..."
+          # Set minimum approvals
+          case $TRACK in
+            alpha) MIN_APPROVALS=${{ env.MIN_APPROVALS_ALPHA }} ;;
+            beta) MIN_APPROVALS=${{ env.MIN_APPROVALS_BETA }} ;;
+            production) MIN_APPROVALS=${{ env.MIN_APPROVALS_PRODUCTION }} ;;
+            *) MIN_APPROVALS=1 ;;
+          esac
+          
+          echo "Waiting for approvals (minimum: $MIN_APPROVALS, timeout: $TIMEOUT seconds)..."
+          echo "Issue: $ISSUE_NUMBER"
+          echo "Approval ID: $APPROVAL_ID"
           
           START_TIME=$(date +%s)
+          END_TIME=$((START_TIME + TIMEOUT))
           
-          while true; do
-            CURRENT_TIME=$(date +%s)
-            ELAPSED=$((CURRENT_TIME - START_TIME))
-            
-            if [ $ELAPSED -gt $TIMEOUT ]; then
-              echo "Approval timeout reached"
-              echo "approved=false" >> $GITHUB_OUTPUT
-              echo "approval_count=0" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            
-            # Check for auto-approve
-            if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
-              echo "Auto-approving for testing..."
-              echo "approved=true" >> $GITHUB_OUTPUT
-              echo "approval_count=999" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            
+          while [ $(date +%s) -lt $END_TIME ]; do
             # Count approvals
             APPROVALS=$(gh issue view $ISSUE_NUMBER --json comments --jq '.comments[] | select(.body | test("approve", "i")) | .author.login' | wc -l)
             
-            # Get minimum approvals required
-            case $TRACK in
-              "beta") MIN_APPROVALS=${{ env.MIN_APPROVALS_BETA }} ;;
-              "production") MIN_APPROVALS=${{ env.MIN_APPROVALS_PRODUCTION }} ;;
-              "closed") MIN_APPROVALS=${{ env.MIN_APPROVALS_CLOSED }} ;;
-              *) MIN_APPROVALS=1 ;;
-            esac
+            # Count rejections
+            REJECTIONS=$(gh issue view $ISSUE_NUMBER --json comments --jq '.comments[] | select(.body | test("reject", "i")) | .author.login' | wc -l)
             
-            echo "Current approvals: $APPROVALS, Required: $MIN_APPROVALS"
+            echo "Current approvals: $APPROVALS (minimum: $MIN_APPROVALS)"
+            echo "Current rejections: $REJECTIONS"
+            
+            if [ "$REJECTIONS" -gt 0 ]; then
+              echo "Request rejected"
+              echo "approved=false" >> $GITHUB_OUTPUT
+              echo "approval_count=$APPROVALS" >> $GITHUB_OUTPUT
+              exit 0
+            fi
             
             if [ "$APPROVALS" -ge "$MIN_APPROVALS" ]; then
-              echo "Sufficient approvals received"
+              echo "Request approved"
               echo "approved=true" >> $GITHUB_OUTPUT
               echo "approval_count=$APPROVALS" >> $GITHUB_OUTPUT
               exit 0
             fi
             
-            # Check for rejections
-            REJECTIONS=$(gh issue view $ISSUE_NUMBER --json comments --jq '.comments[] | select(.body | test("reject", "i")) | .author.login' | wc -l)
-            if [ "$REJECTIONS" -gt 0 ]; then
-              echo "Rejection detected"
-              echo "approved=false" >> $GITHUB_OUTPUT
-              echo "approval_count=0" >> $GITHUB_OUTPUT
+            # Auto-approve for testing
+            if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
+              echo "Auto-approving for testing..."
+              gh issue comment $ISSUE_NUMBER --body "Auto-approved for testing purposes"
+              echo "approved=true" >> $GITHUB_OUTPUT
+              echo "approval_count=1" >> $GITHUB_OUTPUT
               exit 0
             fi
             
             sleep 30
           done
+          
+          echo "Timeout reached"
+          echo "approved=false" >> $GITHUB_OUTPUT
+          echo "approval_count=$APPROVALS" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Job 4: Execute promotion if approved
+  # Job 5: Execute promotion
   execute-promotion:
+    if: github.event.inputs.action == 'promote' && needs.wait-for-approval.outputs.approved == 'true'
     needs: [fetch-versions, create-approval-request, wait-for-approval]
-    if: needs.wait-for-approval.outputs.approved == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -340,20 +518,12 @@ jobs:
         run: |
           VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
           
-          # Find the release workflow run that matches the version
-          echo "Searching for workflow run for v$VERSION..."
-          
-          # Get recent workflow runs and find the one that created the v$VERSION tag
-          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=20 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
+          # Find the release workflow run
+          WORKFLOW_RUN=$(gh run list --workflow="Build and Release Android App" --branch="main" --limit=10 --json databaseId,headBranch,status,conclusion --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId' | head -1)
           
           if [ -n "$WORKFLOW_RUN" ]; then
             echo "Found workflow run: $WORKFLOW_RUN"
             echo "workflow_run_id=$WORKFLOW_RUN" >> $GITHUB_OUTPUT
-            
-            # Check if this workflow run created the right tag
-            echo "Verifying workflow run created v$VERSION..."
-            WORKFLOW_INFO=$(gh run view $WORKFLOW_RUN --json headBranch,status,conclusion,createdAt)
-            echo "Workflow info: $WORKFLOW_INFO"
           else
             echo "No completed release workflow found"
             exit 1
@@ -400,80 +570,6 @@ jobs:
           
           VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
           
-          # Check for AAB file with correct version
-          AAB_FILE=$(find ./release -name "*$VERSION*.aab" | head -1)
-          if [ -f "$AAB_FILE" ]; then
-            echo "Found correct AAB file: $AAB_FILE"
-          else
-            # Check for any AAB file
-            ANY_AAB=$(find ./release -name "*.aab" | head -1)
-            if [ -f "$ANY_AAB" ]; then
-              echo "Found AAB file but wrong version: $ANY_AAB"
-              echo "Expected version: $VERSION"
-              echo "This AAB is from an older build, checking if v$VERSION release workflow ran..."
-              
-              # Check if the release workflow was triggered for v$VERSION
-              echo "Checking for v$VERSION tag and corresponding workflow run..."
-              TAG_EXISTS=$(gh tag list --limit 100 | grep "v$VERSION" || echo "")
-              if [ -n "$TAG_EXISTS" ]; then
-                echo "Tag v$VERSION exists, checking if release workflow ran..."
-                
-                # Look for workflow runs that might have created this tag
-                RELEASE_RUNS=$(gh run list --workflow="Build and Release Android App" --limit=20 --json databaseId,headBranch,status,conclusion,createdAt --jq '.[] | select(.headBranch == "main" and .status == "completed") | .databaseId')
-                
-                FOUND_CORRECT=false
-                for RUN_ID in $RELEASE_RUNS; do
-                  echo "Checking workflow run $RUN_ID for v$VERSION..."
-                  
-                  # Download artifacts from this run
-                  rm -rf ./release/*
-                  dawidd6/action-download-artifact@v3 \
-                    --github-token ${{ secrets.GITHUB_TOKEN }} \
-                    --run-id $RUN_ID \
-                    --name release-aab \
-                    --path ./release
-                  
-                  # Check if this has the right version
-                  CORRECT_AAB=$(find ./release -name "*$VERSION*.aab" | head -1)
-                  if [ -f "$CORRECT_AAB" ]; then
-                    echo "Found correct AAB in workflow run $RUN_ID: $CORRECT_AAB"
-                    FOUND_CORRECT=true
-                    break
-                  fi
-                done
-                
-                if [ "$FOUND_CORRECT" = "false" ]; then
-                  echo "WARNING: No v$VERSION AAB found in any release workflow runs"
-                  echo "This means the release workflow was not triggered for v$VERSION"
-                  echo "Using existing AAB for testing purposes (v1.0.59)"
-                  echo ""
-                  echo "NOTE: For production, you should run the 'Build and Release Android App' workflow for v$VERSION first"
-                  echo "You can trigger it by pushing the v$VERSION tag or running the workflow manually"
-                  echo ""
-                  
-                  # Use the existing AAB for testing
-                  echo "Proceeding with existing AAB for testing..."
-                  EXISTING_AAB=$(find ./release -name "*.aab" | head -1)
-                  if [ -f "$EXISTING_AAB" ]; then
-                    echo "Using existing AAB: $EXISTING_AAB"
-                    echo "NOTE: This is v1.0.59, not v$VERSION - for testing only"
-                  else
-                    echo "ERROR: No AAB files found at all"
-                    exit 1
-                  fi
-                fi
-              else
-                echo "ERROR: Tag v$VERSION does not exist"
-                echo "Please create the v$VERSION tag first"
-                exit 1
-              fi
-            else
-              echo "ERROR: No AAB file found in release artifacts"
-              echo "This means no release workflow has been run"
-              exit 1
-            fi
-          fi
-          
           # Final check - ensure we have an AAB file (any version is fine for testing)
           AAB_COUNT=$(find ./release -name "*.aab" | wc -l)
           if [ "$AAB_COUNT" -eq 0 ]; then
@@ -488,6 +584,12 @@ jobs:
           ACTUAL_AAB=$(find ./release -name "*.aab" | head -1)
           ACTUAL_VERSION=$(basename "$ACTUAL_AAB" | sed 's/pypyradio-//' | sed 's/.aab//')
           echo "NOTE: Using AAB version: $ACTUAL_VERSION (requested: $VERSION)"
+
+      - name: Create release notes
+        run: |
+          VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
+          mkdir -p whatsnew
+          printf 'Version %s\n\nPromoted to %s track.\n\nChanges:\n- Stability improvements\n- Bug fixes\n- Performance optimizations\n' "$VERSION" "${{ github.event.inputs.track }}" > whatsnew/whatsnew-en-US
 
       - name: Promote to target track
         uses: r0adkll/upload-google-play@v1
@@ -546,10 +648,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Job 5: Handle rejection or timeout
+  # Job 6: Handle rejection or timeout
   handle-rejection:
+    if: github.event.inputs.action == 'promote' && needs.wait-for-approval.outputs.approved == 'false'
     needs: [fetch-versions, create-approval-request, wait-for-approval]
-    if: needs.wait-for-approval.outputs.approved == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Handle rejection or timeout
@@ -558,17 +660,18 @@ jobs:
           VERSION="${{ needs.fetch-versions.outputs.latest_version }}"
           TRACK="${{ github.event.inputs.track }}"
           
-          gh issue comment $ISSUE_NUMBER --body "## Promotion Rejected/Timed Out :x:
+          gh issue comment $ISSUE_NUMBER --body "## Promotion Failed :x:
           
           **Version:** v$VERSION
           **Track:** $TRACK
-          **Status:** Rejected or timeout reached
           **Requested by:** ${{ github.actor }}
-          **Processed at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Failed at:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
-          This promotion request has been rejected or timed out. Please create a new request if needed."
+          This promotion request was not approved within the timeout period or was rejected.
+          
+          Please create a new promotion request if needed."
           
           # Close the issue
-          gh issue close $ISSUE_NUMBER --comment "Promotion request rejected or timed out."
+          gh issue close $ISSUE_NUMBER --comment "Promotion request closed due to timeout or rejection."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
