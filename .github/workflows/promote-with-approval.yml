@@ -76,11 +76,13 @@ jobs:
           echo "Final versions list:"
           echo "$VERSIONS"
           
-          # Convert to JSON format (simpler approach)
-          VERSIONS_JSON=$(echo "$VERSIONS" | sed '/^$/d' | jq -R . | jq -s .)
+          # Get latest version (simple approach)
           LATEST_VERSION=$(echo "$VERSIONS" | head -1 | tr -d '\n\r')
           
-          echo "versions=$VERSIONS_JSON" >> $GITHUB_OUTPUT
+          # Create a simple comma-separated list for versions
+          VERSIONS_LIST=$(echo "$VERSIONS" | sed '/^$/d' | head -10 | tr '\n' ',' | sed 's/,$//')
+          
+          echo "versions=$VERSIONS_LIST" >> $GITHUB_OUTPUT
           echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
 
   # Job 2: Create approval request
