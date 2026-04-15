@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,7 +73,7 @@ fun BrowseScreen(
     vm: StationsViewModel,
     player: Player,
     onGoAbout: () -> Unit = {},
-    onGoPodcasts: () -> Unit = {},
+    onGoAbout: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {
@@ -94,10 +94,9 @@ fun BrowseScreen(
     var selectedCategory by remember { mutableStateOf("popular") }
     
     // Hide failed stations
-    val displayStations = remember(state.stations, state.failedStationIds) {
-        state.stations.filter { 
-            it.urlResolved.isNotBlank() && !state.failedStationIds.contains(it.stationuuid)
-        }
+    // Show all stations (don't hide failed ones anymore - Requirement 2)
+    val displayStations = remember(state.stations) {
+        state.stations.filter { it.urlResolved.isNotBlank() }
     }
     
     // Listen to player state
@@ -331,22 +330,12 @@ fun BrowseScreen(
                     }
                 }
                 
-                // About and Podcast buttons
+                // About button
                 IconButton(onClick = onGoAbout) {
                     Icon(
                         Icons.Default.Info,
                         contentDescription = "About",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                FilledTonalIconButton(
-                    onClick = onGoPodcasts,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Podcasts,
-                        contentDescription = "Podcasts",
-                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -506,7 +495,7 @@ private fun StationRow(
             containerColor = if (isActive) 
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
             else if (isFailed)
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
             else 
                 MaterialTheme.colorScheme.surface
         ),
@@ -574,7 +563,9 @@ private fun StationRow(
                     st.name, 
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    color = if (isActive) MaterialTheme.colorScheme.primary 
+                            else if (isFailed) MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                            else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1, 
                     overflow = TextOverflow.Ellipsis
                 )

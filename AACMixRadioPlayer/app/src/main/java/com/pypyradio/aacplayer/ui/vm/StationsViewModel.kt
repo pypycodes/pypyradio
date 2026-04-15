@@ -29,7 +29,7 @@ data class UiState(
     val failedStationIds: Set<String> = emptySet(),
     val workingStationIds: Set<String> = emptySet(),
     val playbackError: String? = null,
-    val filter: StationFilter = StationFilter.HIDE_FAILED,
+    val filter: StationFilter = StationFilter.ALL,
     val isFilteringStations: Boolean = false  // true while background health check is running
 )
 

@@ -407,15 +407,24 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
                 val tags = station.tags?.lowercase() ?: ""
                 
                 // Prefer higher bitrate stations (128kbps+)
-                bitrate >= 128 &&
-                // Exclude test stations
-                !name.contains("test") &&
-                // Prefer established stations
-                (tags.contains("bbc") || tags.contains("npr") || 
-                 tags.contains("mirchi") || tags.contains("radio") ||
-                 name.contains("bbc") || name.contains("npr") || 
-                 name.contains("mirchi") || name.contains("times"))
+                val isHighQuality = bitrate >= 128
+                // Check for well-known trusted broadcasters
+                val trustedKeywords = listOf(
+                    "bbc", "npr", "mirchi", "times", "vividh", "air ", "capital", 
+                    "heart", "classic", "magic", "virgin", "absolute", "lbc", 
+                    "voa", "dw ", "france", "rai ", "rtve", "cbc", "abc ", "cbs"
+                )
+                val isTrusted = trustedKeywords.any { name.contains(it) || tags.contains(it) }
+                
+                // Prioritize high quality or trusted, but exclude suspected dead/test stations
+                (isHighQuality || isTrusted) && !name.contains("test") && !name.contains("offline")
             }
+            .sortedWith(compareByDescending<Station> { 
+                // Boost trusted stations and those with very high bitrates
+                val score = (if (it.bitrate ?: 0 >= 192) 2 else 0) + 
+                            (if (it.name.lowercase().let { n -> listOf("bbc", "npr", "mirchi").any { t -> n.contains(t) } }) 5 else 0)
+                score
+            }.thenByDescending { it.bitrate ?: 0 })
             .take(limit)
     }
 }
