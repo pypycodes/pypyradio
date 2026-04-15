@@ -5,24 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.material.icons.filled.Podcasts
-import androidx.media3.material.icons.filled.Radio
-import androidx.media3.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,10 +19,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import com.pypyradio.aacplayer.data.model.Podcast
+import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
-import kotlinx.coroutines.launch
 
 private enum class FavoritesTab { RADIO, PODCASTS }
 
@@ -194,9 +179,6 @@ fun FavoritesScreen(
         currentPlayingId = episode.id
     }
 
-    // Play is handled by BrowseScreen's logic if requested, but Favorites has its own copy
-    fun playStation(st: Station) {
-
     Scaffold(
         topBar = {
             Surface(
@@ -310,7 +292,7 @@ fun FavoritesScreen(
                                     onClick = { podcastVm.backToPodcasts() },
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 ) {
-                                    Icon(androidx.compose.material.icons.automirrored.filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Back to Podcasts")
                                 }
@@ -474,9 +456,10 @@ private fun FavStationRow(
         }
     }
 }
+
 @Composable
 private fun FavPodcastRow(
-    podcast: com.pypyradio.aacplayer.data.model.Podcast,
+    podcast: Podcast,
     onRemove: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -532,7 +515,7 @@ private fun FavPodcastRow(
 
 @Composable
 private fun FavEpisodeRow(
-    episode: com.pypyradio.aacplayer.data.model.PodcastEpisode,
+    episode: PodcastEpisode,
     isPlaying: Boolean,
     onClick: () -> Unit
 ) {
