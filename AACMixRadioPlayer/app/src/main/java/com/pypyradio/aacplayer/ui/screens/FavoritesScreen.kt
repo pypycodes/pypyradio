@@ -101,6 +101,8 @@ fun FavoritesScreen(
     }
     
     fun playStation(st: Station) {
+        // Clear failed status specifically for this station so user sees a "fresh" attempt
+        vm.clearFailedStatus(st.stationuuid)
         val now = System.currentTimeMillis()
         if (now - lastPlayTime < 500) return
         lastPlayTime = now
@@ -187,27 +189,13 @@ fun FavoritesScreen(
                 tonalElevation = 2.dp
             ) {
                 TopAppBar(
-                    title = { 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFFFE0E0)
-                            ) {
-                                Icon(
-                                    Icons.Default.Favorite,
-                                    contentDescription = "Favorites",
-                                    modifier = Modifier.size(36.dp).padding(6.dp),
-                                    tint = Color(0xFFE91E63)
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                "Favorites",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                    title = {
+                        Text(
+                            "Favorites",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent

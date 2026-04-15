@@ -28,13 +28,13 @@ import com.pypyradio.aacplayer.MainActivity
 import com.pypyradio.aacplayer.data.db.AppDatabase
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.guava.future
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
 import com.pypyradio.aacplayer.data.repo.StationRepository
-import kotlinx.coroutines.*
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.first
 
 /**
  * RadioPlaybackService - Media3 MediaLibraryService for Android Auto
@@ -135,8 +135,18 @@ class RadioPlaybackService : MediaLibraryService() {
             podcastRepo = PodcastRepository(db.favoritePodcastDao())
             prefs = AppPreferences(this)
 
-            // Create player with error handling
+            // Create player with error handling and slow network support
+            val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    30_000, // minBufferMs
+                    60_000, // maxBufferMs
+                    2_500,  // bufferForPlaybackMs
+                    5_000   // bufferForPlaybackAfterRebufferMs
+                )
+                .build()
+
             player = ExoPlayer.Builder(this)
+                .setLoadControl(loadControl)
                 .setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -220,28 +230,20 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         }
     }
     
-    private fun loadPodcastsSync() {
+    private suspend fun loadPodcastsInternal() {
         try {
-            val loaded = runBlocking {
-                podcastRepo.getTrendingPodcasts(limit = 20)
-            }
+            val loaded = podcastRepo.getTrendingPodcasts(limit = 20)
             cachedPodcasts = loaded
-            Log.d(TAG, "Sync loaded ${loaded.size} podcasts from API")
+            Log.d(TAG, "Internal loaded ${loaded.size} podcasts from API")
         } catch (e: Exception) {
-            Log.e(TAG, "Sync podcast load error", e)
+            Log.e(TAG, "Internal podcast load error", e)
         }
     }
     
-    private fun loadFavoritesSync(): List<Station> {
+    private suspend fun loadFavoritesInternal(): List<Station> {
         return try {
-            val favorites = runBlocking {
-                stationRepo.observeFavorites().first()
-            }
+            val favorites = stationRepo.observeFavorites().first()
             Log.d(TAG, "Loaded ${favorites.size} favorites from database")
-            // Debug: Log favorite station details
-            favorites.forEach { station ->
-                Log.d(TAG, "Favorite: ${station.name}, url: ${station.urlResolved}, country: ${station.countryCode}, tags: ${station.tags}")
-            }
             // Update cached favorites for consistency
             cachedFavorites = favorites
             favorites
@@ -266,17 +268,15 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         }
     }
     
-    private fun loadStationsSync() {
+    private suspend fun loadStationsInternal() {
         try {
-            val loaded = runBlocking {
-                stationRepo.getFilteredAacStations(limit = 100)
-            }
+            val loaded = stationRepo.getFilteredAacStations(limit = 100)
             if (loaded.isNotEmpty()) {
                 cachedStations = loaded
-                Log.d(TAG, "Sync loaded ${loaded.size} stations from API")
+                Log.d(TAG, "Internal loaded ${loaded.size} stations from API")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Sync station load error", e)
+            Log.e(TAG, "Internal station load error", e)
         }
     }
 
@@ -351,9 +351,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             page: Int,
             pageSize: Int,
             params: LibraryParams?
-        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = serviceScope.future {
             Log.d(TAG, "onGetChildren: $parentId (page=$page)")
-            return try {
+            try {
                 val items = when (parentId) {
                     MEDIA_ID_ROOT -> listOf(
                         browsableItem(MEDIA_ID_TOP_STATIONS, "Top Stations"),
@@ -363,69 +363,57 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> {
-                        // Load trusted high-quality stations
-                        val topStations = runBlocking {
-                            try {
-                                stationRepo.getRecommendedStations(50)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to load top stations", e)
-                                if (cachedStations.isEmpty()) loadStationsSync()
-                                cachedStations.take(50)
-                            }
+                        // Load trusted high-quality stations asynchronously
+                        val topStations = try {
+                            stationRepo.getRecommendedStations(50)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to load top stations", e)
+                            if (cachedStations.isEmpty()) loadStationsInternal()
+                            cachedStations.take(50)
                         }
                         topStations.map(::playableItem)
                     }
                     MEDIA_ID_FAVORITES -> {
-                        // Show sub-categories for stations and podcasts
                         listOf(
                             browsableItem(MEDIA_ID_FAVORITE_STATIONS, "Favorite Stations"),
                             browsableItem(MEDIA_ID_FAVORITE_PODCASTS, "Favorite Podcasts")
                         )
                     }
                     MEDIA_ID_FAVORITE_STATIONS -> {
-                        // Load favorite radio stations
-                        val favoriteStations = loadFavoritesSync()
-                        favoriteStations.map(::playableItem)
+                        loadFavoritesInternal().map(::playableItem)
                     }
                     MEDIA_ID_FAVORITE_PODCASTS -> {
-                        // Load favorite podcasts
-                        val favoritePodcasts = runBlocking {
-                            try {
-                                podcastRepo.observeFavorites().first()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to load favorite podcasts", e)
-                                emptyList()
-                            }
+                        val favoritePodcasts = try {
+                            podcastRepo.observeFavorites().first()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to load favorite podcasts", e)
+                            emptyList()
                         }
                         favoritePodcasts.map { podcast ->
                             browsableItem("podcast_${podcast.id}", podcast.title)
                         }
                     }
-                                        MEDIA_ID_ENGLISH -> {
-                        val englishStations = runBlocking {
-                            try {
-                                stationRepo.getEnglishStations(50)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to load English stations", e)
-                                emptyList()
-                            }
+                    MEDIA_ID_ENGLISH -> {
+                        val englishStations = try {
+                            stationRepo.getEnglishStations(50)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to load English stations", e)
+                            emptyList()
                         }
                         englishStations.map(::playableItem)
                     }
                     MEDIA_ID_HINDI -> {
-                        val indianStations = runBlocking {
-                            try {
-                                stationRepo.getIndianStations(50)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to load Indian stations", e)
-                                emptyList()
-                            }
+                        val indianStations = try {
+                            stationRepo.getIndianStations(50)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to load Indian stations", e)
+                            emptyList()
                         }
                         indianStations.map(::playableItem)
                     }
                     MEDIA_ID_PODCASTS -> {
                         if (cachedPodcasts.isEmpty()) {
-                            loadPodcastsSync()
+                            loadPodcastsInternal()
                         }
                         cachedPodcasts.map { podcast ->
                             browsableItem("podcast_${podcast.id}", podcast.title)
@@ -435,16 +423,12 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         val podcastId = parentId.removePrefix("podcast_")
                         val podcast = cachedPodcasts.find { it.id == podcastId }
                         if (podcast != null) {
-                            // Load episodes if not cached
                             if (!cachedEpisodes.containsKey(podcastId)) {
-                                serviceScope.launch {
-                                    try {
-                                        val episodes = podcastRepo.getEpisodes(podcast, limit = 50)
-                                        cachedEpisodes = cachedEpisodes + (podcastId to episodes)
-                                        Log.d(TAG, "Loaded ${episodes.size} episodes for ${podcast.title}")
-                                    } catch (e: Exception) {
-                                        Log.w(TAG, "Failed to load episodes for ${podcast.title}", e)
-                                    }
+                                try {
+                                    val episodes = podcastRepo.getEpisodes(podcast, limit = 50)
+                                    cachedEpisodes = cachedEpisodes + (podcastId to episodes)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to load episodes for ${podcast.title}", e)
                                 }
                             }
                             cachedEpisodes[podcastId]?.map { episode ->
@@ -458,10 +442,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     }
                 }
                 Log.d(TAG, "Returning ${items.size} items for $parentId")
-                Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
             } catch (e: Exception) {
                 Log.e(TAG, "onGetChildren error", e)
-                Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+                LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
             }
         }
 
@@ -525,57 +509,47 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             mediaItems: MutableList<MediaItem>,
             startIndex: Int,
             startPositionMs: Long
-        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = serviceScope.future {
             Log.d(TAG, "onSetMediaItems: ${mediaItems.size} items, startIndex=$startIndex")
             
-            return try {
+            try {
                 if (mediaItems.isEmpty()) {
-                    Futures.immediateFuture(
-                        MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
-                    )
+                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
                 } else {
-                    // Ensure data is loaded before resolving items
+                    // Ensure data is loaded before resolving items asynchronously
                     if (cachedStations.isEmpty()) {
-                        loadStationsSync()
+                        loadStationsInternal()
                     }
                     if (cachedPodcasts.isEmpty()) {
-                        loadPodcastsSync()
+                        loadPodcastsInternal()
                     }
                     if (cachedFavorites.isEmpty()) {
-                        loadFavoritesSync()
+                        loadFavoritesInternal()
                     }
                     
                     // Resolve items from cache and validate before playback
                     val resolvedItems = mediaItems.mapNotNull { item ->
                         val mediaId = item.mediaId
                         
-                        // Skip already failed stations
-                        if (failedStations.contains(mediaId)) {
-                            Log.d(TAG, "Skipping failed station: $mediaId")
-                            return@mapNotNull null
-                        }
-                        
                         // Check if it's a station (check all possible sources)
                         var station = cachedStations.find { it.stationuuid == mediaId } 
                             ?: cachedFavorites.find { it.stationuuid == mediaId }
                         
-                        // If not found in caches, try to load it dynamically
+                        // If not found in caches, try to load it dynamically asynchronously
                         if (station == null) {
-                            station = runBlocking {
-                                try {
-                                    // Try to find in English stations
-                                    val englishStations = stationRepo.getEnglishStations(200)
-                                    englishStations.find { it.stationuuid == mediaId }
-                                        ?: // Try to find in Indian stations
-                                        stationRepo.getIndianStations(200).find { it.stationuuid == mediaId }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to resolve station $mediaId", e)
-                                    null
-                                }
+                            station = try {
+                                // Try to find in English stations
+                                val englishStations = stationRepo.getEnglishStations(200)
+                                englishStations.find { it.stationuuid == mediaId }
+                                    ?: // Try to find in Indian stations
+                                    stationRepo.getIndianStations(200).find { it.stationuuid == mediaId }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to resolve station $mediaId", e)
+                                null
                             }
                         }
+                        
                         if (station != null) {
-                            // Validate station before creating media item
                             if (isValidStation(station)) {
                                 if (item.localConfiguration == null) {
                                     playableItem(station)
@@ -591,7 +565,6 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             // Check if it's a podcast episode
                             val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
                             if (episode != null) {
-                                // Validate episode before creating media item
                                 if (isValidEpisode(episode)) {
                                     if (item.localConfiguration == null) {
                                         playablePodcastEpisodeItem(episode)
@@ -613,9 +586,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     if (resolvedItems.isEmpty()) {
                         Log.w(TAG, "No valid media items after validation")
                         showPlaybackError("No valid stations", "All selected stations failed validation")
-                        Futures.immediateFuture(
-                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
-                        )
+                        MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
                     } else {
                         Log.d(TAG, "Setting ${resolvedItems.size} validated items to player, starting at index $startIndex")
                         player?.stop()
@@ -623,16 +594,12 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         player?.prepare()
                         player?.play()
                         
-                        Futures.immediateFuture(
-                            MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
-                        )
+                        MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "onSetMediaItems error", e)
-                Futures.immediateFuture(
-                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
-                )
+                MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
             }
         }
 
@@ -736,7 +703,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     private fun startBufferingTimeoutCheck() {
         cancelBufferingTimeoutCheck()
         bufferingTimeoutJob = serviceScope.launch {
-            delay(15000) // 15 seconds timeout
+            delay(20000) // 20 seconds timeout for buffering (accounting for slow networks)
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
                 Log.w(TAG, "Buffering timeout - treating as error")

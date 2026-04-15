@@ -2,13 +2,20 @@ package com.pypyradio.aacplayer.data.db
 
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "station_status")
+@Entity(
+    tableName = "station_status",
+    indices = [
+        Index(value = ["stationuuid"]), 
+        Index(value = ["lastStatus"])
+    ]
+)
 data class StationStatusEntity(
     @PrimaryKey val stationuuid: String,
     val lastPlayedTimestamp: Long = 0,

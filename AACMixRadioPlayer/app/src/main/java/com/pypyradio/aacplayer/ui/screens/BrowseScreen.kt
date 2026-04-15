@@ -9,15 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -146,6 +138,8 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
+        // Clear failed status specifically for this station so user sees a "fresh" attempt
+        vm.clearFailedStatus(st.stationuuid)
         // Cancel any pending auto-advance so it doesn't override the user's manual choice
         autoAdvanceFromId = null
         val now = System.currentTimeMillis()
@@ -269,73 +263,89 @@ fun BrowseScreen(
     }
     
     Scaffold(
+        topBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            "Radio",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = onGoAbout) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "About",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(modifier.padding(padding).fillMaxSize()) {
             
-            // Compact header: Logo + Search bar + About — all in one row
-            Row(
+            // Search bar - aligned with Podcast style
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-
-                // Search bar
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 4.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.padding(start = 8.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextField(
-                            modifier = Modifier.weight(1f),
-                            value = state.query,
-                            onValueChange = vm::setQuery,
-                            placeholder = { Text("Search stations...") },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            )
-                        )
-                        if (state.query.isNotEmpty()) {
-                            IconButton(onClick = { 
-                                vm.setQuery("")
-                                loadCategory(selectedCategory)
-                            }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
-                            }
-                            FilledTonalIconButton(
-                                onClick = { vm.search() },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-                
-                // About button
-                IconButton(onClick = onGoAbout) {
                     Icon(
-                        Icons.Default.Info,
-                        contentDescription = "About",
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = 12.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TextField(
+                        modifier = Modifier.weight(1f),
+                        value = state.query,
+                        onValueChange = vm::setQuery,
+                        placeholder = { Text("Search stations...") },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        )
+                    )
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { 
+                            vm.setQuery("")
+                            loadCategory(selectedCategory)
+                        }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(20.dp))
+                        }
+                        FilledTonalIconButton(
+                            onClick = { vm.search() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
                 }
             }
             
