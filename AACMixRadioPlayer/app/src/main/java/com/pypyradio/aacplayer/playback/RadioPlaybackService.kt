@@ -150,7 +150,7 @@ class RadioPlaybackService : MediaLibraryService() {
             // Add player listener for error handling
             player?.addListener(PlayerErrorListener())
 
-           // Create session with custom commands for next/prev
+            // Create session with custom commands for next/prev
             session = MediaLibrarySession.Builder(this, player!!, RadioLibraryCallback())
                 .setSessionActivity(
                     PendingIntent.getActivity(
@@ -160,6 +160,25 @@ class RadioPlaybackService : MediaLibraryService() {
                     )
                 )
                 .build()
+            
+            // Set session to support playlist navigation
+            session?.availableSessionCommands = MediaSession.ConnectionHints.Builder()
+                .build()
+                .let { hints ->
+                    val commands = MediaSession.availableSessionCommands.buildUpon()
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_CHILDREN)
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_ITEM)
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_LIBRARY_ROOT)
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_SEARCH)
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_SUBSCRIBE)
+                        .add(SessionCommand.COMMAND_CODE_LIBRARY_UNSUBSCRIBE)
+                        .build()
+                    commands
+                }
+            
+            // Note: Media3 handles standard Player commands (SKIP_TO_NEXT/PREVIOUS)
+            // if the Player.Listener reports them as available. ExoPlayer handles this automatically
+            // if it has a playlist items.
 
             // Notification
             setMediaNotificationProvider(DefaultMediaNotificationProvider(this))
@@ -359,23 +378,13 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         browsableItem(MEDIA_ID_PODCASTS, "Podcasts")
                     )
                     MEDIA_ID_TOP_STATIONS -> {
-                        // Load high-quality stations using enhanced filtering
+                        // Load trusted high-quality stations
                         val topStations = runBlocking {
                             try {
-                                // Combine English and Indian stations for FOR YOU
-                                val englishStations = stationRepo.getEnglishStations(25)
-                                val indianStations = stationRepo.getIndianStations(25)
-                                (englishStations + indianStations)
-                                    .sortedWith(compareByDescending<Station> { it.bitrate ?: 0 }
-                                        .thenByDescending { it.tags?.contains("popular") == true }
-                                        .thenBy { it.name })
-                                    .take(50)
+                                stationRepo.getRecommendedStations(50)
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to load top stations", e)
-                                // Fallback to cached stations
-                                if (cachedStations.isEmpty()) {
-                                    loadStationsSync()
-                                }
+                                if (cachedStations.isEmpty()) loadStationsSync()
                                 cachedStations.take(50)
                             }
                         }
@@ -624,6 +633,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         )
                     } else {
                         Log.d(TAG, "Setting ${resolvedItems.size} validated items to player, starting at index $startIndex")
+                        player?.stop()
                         player?.setMediaItems(resolvedItems, startIndex, startPositionMs)
                         player?.prepare()
                         player?.play()
@@ -792,23 +802,27 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             
             // Try to find next playable station
             var attempts = 0
-            val maxAttempts = minOf(totalItems, 10) // Prevent infinite loops
+            val maxAttempts = totalItems // Try every station in the list once
+            var nextIndex = currentPlayer.currentMediaItemIndex
             
             while (attempts < maxAttempts) {
-                val nextIndex = (currentPlayer.currentMediaItemIndex + 1) % totalItems
+                nextIndex = (nextIndex + 1) % totalItems
                 val nextMediaItem = currentPlayer.getMediaItemAt(nextIndex)
                 val nextMediaId = nextMediaItem.mediaId
                 
                 Log.d(TAG, "Attempting to skip to station at index $nextIndex: $nextMediaId")
                 
-                if (!failedStations.contains(nextMediaId)) {
+                // Even if it failed before, we try it again during auto-skip 
+                // unless it's fundamentally broken (missing URL)
+                val nextUrl = nextMediaItem.localConfiguration?.uri?.toString() ?: ""
+                if (nextUrl.isNotBlank()) {
                     Log.i(TAG, "Skipping to next station: $nextMediaId (Reason: $reason)")
                     currentPlayer.seekToDefaultPosition(nextIndex)
                     currentPlayer.prepare()
                     currentPlayer.play()
                     break
                 } else {
-                    Log.d(TAG, "Skipping failed station: $nextMediaId")
+                    Log.d(TAG, "Skipping station with empty URL: $nextMediaId")
                     attempts++
                 }
             }
@@ -833,10 +847,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
      * Validate station before playback
      */
     private fun isValidStation(station: Station): Boolean {
-        return station.urlResolved.isNotBlank() &&
-               station.name.isNotBlank() &&
-               (station.lastCheckOk == 1) &&
-               !failedStations.contains(station.stationuuid)
+        // More lenient validation: allow even if it failed before, giving it another chance
+        // only reject if URL is missing.
+        return station.urlResolved.isNotBlank() && station.name.isNotBlank()
     }
     
     /**

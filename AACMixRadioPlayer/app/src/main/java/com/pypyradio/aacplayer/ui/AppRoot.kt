@@ -229,7 +229,6 @@ fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = v
                     vm = vm,
                     player = player,
                     onGoAbout = { showAbout = true },
-                    onGoPodcasts = { selectedTab = MainNavTab.PODCASTS },
                     snackbarHostState = snackbarHostState,
                     modifier = Modifier.padding(padding)
                 )

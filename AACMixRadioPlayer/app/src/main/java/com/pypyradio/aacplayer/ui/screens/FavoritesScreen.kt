@@ -5,15 +5,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Podcasts
-import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.material.icons.filled.Podcasts
+import androidx.media3.material.icons.filled.Radio
+import androidx.media3.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,8 +35,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
-import com.pypyradio.aacplayer.data.model.Podcast
-import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
@@ -50,9 +57,10 @@ fun FavoritesScreen(
     val podcastState by podcastVm.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Filter out failed stations from favorites
-    val validRadioFavs = remember(radioFavs, failedStationIds) {
-        radioFavs.filter { !failedStationIds.contains(it.stationuuid) && it.urlResolved.isNotBlank() }
+    // Stations already marked as yellow in browse screen should still be visible in favorites
+    // but we can filter out those with absolutely no URL.
+    val validRadioFavs = remember(radioFavs) {
+        radioFavs.filter { it.urlResolved.isNotBlank() }
     }
     
     var selectedTab by remember { mutableStateOf(FavoritesTab.RADIO) }
@@ -186,6 +194,9 @@ fun FavoritesScreen(
         currentPlayingId = episode.id
     }
 
+    // Play is handled by BrowseScreen's logic if requested, but Favorites has its own copy
+    fun playStation(st: Station) {
+
     Scaffold(
         topBar = {
             Surface(
@@ -215,7 +226,6 @@ fun FavoritesScreen(
                             )
                         }
                     },
-                    navigationIcon = { },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
                     )
@@ -277,9 +287,11 @@ fun FavoritesScreen(
                     } else {
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(validRadioFavs, key = { it.stationuuid }) { st ->
+                                val isFailed = failedStationIds.contains(st.stationuuid)
                                 val isCurrentPlaying = currentPlayingId == st.stationuuid && isPlaying
                                 FavStationRow(
                                     st = st,
+                                    isFailed = isFailed,
                                     isPlaying = isCurrentPlaying,
                                     onRowClick = { playStation(st) },
                                     onRemove = { vm.toggleFavorite(st) }
@@ -298,7 +310,7 @@ fun FavoritesScreen(
                                     onClick = { podcastVm.backToPodcasts() },
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(androidx.compose.material.icons.automirrored.filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Back to Podcasts")
                                 }
@@ -360,6 +372,7 @@ fun FavoritesScreen(
 @Composable
 private fun FavStationRow(
     st: Station, 
+    isFailed: Boolean = false,
     isPlaying: Boolean, 
     onRowClick: () -> Unit, 
     onRemove: () -> Unit
@@ -371,6 +384,8 @@ private fun FavStationRow(
         colors = CardDefaults.cardColors(
             containerColor = if (isPlaying) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            } else if (isFailed) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
@@ -388,6 +403,23 @@ private fun FavStationRow(
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 AsyncImage(model = st.favicon, contentDescription = null, modifier = Modifier.fillMaxSize().padding(4.dp))
+                
+                if (isFailed) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+                        Surface(
+                            modifier = Modifier.size(16.dp),
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = Color.White
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Failed",
+                                modifier = Modifier.padding(1.dp),
+                                tint = Color(0xFFFFB300)
+                            )
+                        }
+                    }
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -442,10 +474,9 @@ private fun FavStationRow(
         }
     }
 }
-
 @Composable
 private fun FavPodcastRow(
-    podcast: Podcast,
+    podcast: com.pypyradio.aacplayer.data.model.Podcast,
     onRemove: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -501,7 +532,7 @@ private fun FavPodcastRow(
 
 @Composable
 private fun FavEpisodeRow(
-    episode: PodcastEpisode,
+    episode: com.pypyradio.aacplayer.data.model.PodcastEpisode,
     isPlaying: Boolean,
     onClick: () -> Unit
 ) {
