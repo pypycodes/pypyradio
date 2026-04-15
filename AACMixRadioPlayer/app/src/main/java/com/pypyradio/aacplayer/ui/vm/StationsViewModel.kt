@@ -307,17 +307,23 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun checkUrlReachable(url: String): Boolean = withContext(Dispatchers.IO) {
         if (url.isBlank()) return@withContext false
+        var connection: HttpURLConnection? = null
         try {
-            val connection = URL(url).openConnection() as HttpURLConnection
+            connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 5000
             connection.readTimeout = 5000
-            connection.requestMethod = "HEAD"
+            // Use GET instead of HEAD because many radio servers (Icecast/Shoutcast) 
+            // return 404 or 405 to HEAD requests even if they are perfectly functional.
+            connection.requestMethod = "GET"
             connection.instanceFollowRedirects = true
+            
+            // We only care about the response code, we don't need to read the stream
             val responseCode = connection.responseCode
-            connection.disconnect()
             responseCode in 200..399
         } catch (e: Exception) {
             false
+        } finally {
+            connection?.disconnect()
         }
     }
     

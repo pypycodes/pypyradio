@@ -27,8 +27,8 @@ android {
         applicationId = "com.pypyradio.aacplayer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 95
-        versionName = "1.0.95"
+        versionCode = 96
+        versionName = "1.0.96"
     }
 
     signingConfigs {
@@ -162,7 +162,8 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")
 
     // Guava (required for Media3 ListenableFuture and ImmutableList)
-    implementation("com.google.guava:guava:32.1.3-android")
+    implementation("com.google.guava:guava:32.1.3-android") 
 }

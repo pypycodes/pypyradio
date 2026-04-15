@@ -140,19 +140,6 @@ fun PodcastScreen(
                                 }
                             }
                             
-                            // Logo and title
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer
-                            ) {
-                                Icon(
-                                    Icons.Default.Podcasts,
-                                    contentDescription = "Podcasts",
-                                    modifier = Modifier.size(36.dp).padding(6.dp),
-                                    tint = MaterialTheme.colorScheme.tertiary
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
                             Text(
                                 if (state.showingEpisodes && state.selectedPodcast != null) 
                                     state.selectedPodcast!!.title 
