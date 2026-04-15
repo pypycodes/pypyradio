@@ -84,8 +84,8 @@ fun BrowseScreen(
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
     
-    // Hide failed stations
-    // Show all stations (don't hide failed ones anymore - Requirement 2)
+    // Show ALL stations (don't hide failed ones anymore - Requirement 2)
+    // This prevents stations from 'disappearing' from the list during scans.
     val displayStations = remember(state.stations) {
         state.stations.filter { it.urlResolved.isNotBlank() }
     }
@@ -168,10 +168,12 @@ fun BrowseScreen(
             // Build windowed slice centred on the tapped station.
             // If selectedIndex == -1 (health check removed station just as user tapped it),
             // play the station standalone — never default to index 0 which plays the wrong station.
+            // Build larger window slice (100 items each side) for better Next/Prev support.
+            // A window of 200 items stays safely within the 1MB Binder IPC size limit.
             val windowedStations: List<Station>
             val startIndexInWindow: Int
             if (selectedIndex >= 0) {
-                val window = 12
+                val window = 100
                 val fromIndex = maxOf(0, selectedIndex - window)
                 val toIndex = minOf(displayStations.size, selectedIndex + window + 1)
                 windowedStations = displayStations.subList(fromIndex, toIndex)
@@ -409,7 +411,7 @@ fun BrowseScreen(
                         Spacer(Modifier.weight(1f))
                         if (state.failedStationIds.isNotEmpty()) {
                             Text(
-                                "${state.failedStationIds.size} removed",
+                                "${state.failedStationIds.size} offline",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                             )

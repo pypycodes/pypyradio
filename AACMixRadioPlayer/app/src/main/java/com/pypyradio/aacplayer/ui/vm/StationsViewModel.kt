@@ -310,10 +310,11 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         var connection: HttpURLConnection? = null
         try {
             connection = URL(url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
+            connection.connectTimeout = 12000 // 12 seconds for slow networks
+            connection.readTimeout = 12000    // 12 seconds for slow networks
+            // Use a standard browser User-Agent to avoid 403/Forbidden from radio servers
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
             // Use GET instead of HEAD because many radio servers (Icecast/Shoutcast) 
-            // return 404 or 405 to HEAD requests even if they are perfectly functional.
             connection.requestMethod = "GET"
             connection.instanceFollowRedirects = true
             

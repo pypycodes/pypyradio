@@ -559,23 +559,29 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                                 null
                             }
                         } else {
-                            // Check if it's a podcast episode
-                            val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
-                            if (episode != null) {
-                                if (isValidEpisode(episode)) {
-                                    if (item.localConfiguration == null) {
-                                        playablePodcastEpisodeItem(episode)
+                            // If not found in cache/db, check if the item already has a URI (passthrough)
+                            if (item.localConfiguration?.uri != null) {
+                                Log.d(TAG, "Trusting UI provided URI for $mediaId")
+                                item
+                            } else {
+                                // Check if it's a podcast episode
+                                val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
+                                if (episode != null) {
+                                    if (isValidEpisode(episode)) {
+                                        if (item.localConfiguration == null) {
+                                            playablePodcastEpisodeItem(episode)
+                                        } else {
+                                            item
+                                        }
                                     } else {
-                                        item
+                                        Log.w(TAG, "Episode validation failed: ${episode.title} ($mediaId)")
+                                        failedStations.add(mediaId)
+                                        null
                                     }
                                 } else {
-                                    Log.w(TAG, "Episode validation failed: ${episode.title} ($mediaId)")
-                                    failedStations.add(mediaId)
+                                    Log.w(TAG, "Unknown media item without URI: $mediaId")
                                     null
                                 }
-                            } else {
-                                Log.w(TAG, "Unknown media item: $mediaId")
-                                null
                             }
                         }
                     }
@@ -710,77 +716,60 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     }
     
     private fun handlePlaybackError(error: Exception) {
-        if (isAutoSkipping) {
-            Log.d(TAG, "Already auto-skipping, ignoring error")
-            return
-        }
-        
         val currentMediaId = player?.currentMediaItem?.mediaId
-        val currentStationName = player?.currentMediaItem?.mediaMetadata?.title
-        
-        Log.w(TAG, "Handling playback error for: $currentStationName ($currentMediaId)")
+        Log.w(TAG, "Handling playback error for: $currentMediaId (Error: ${error.message})")
         
         // Add to failed stations
         if (currentMediaId != null) {
             failedStations.add(currentMediaId)
-            Log.d(TAG, "Added $currentMediaId to failed stations. Total failed: ${failedStations.size}")
         }
         
-        // Try to skip to next station
-        skipToNextStation("Playback error: ${error.message}")
+        // Don't re-enter if already skipping, but ensure skipping continues
+        if (isAutoSkipping) return
+        
+        skipToNextStation("Playback error")
     }
     
     private fun skipToNextStation(reason: String) {
-        isAutoSkipping = true
+        val currentPlayer = player ?: return
+        val totalItems = currentPlayer.mediaItemCount
         
+        if (totalItems <= 1) {
+            Log.w(TAG, "Cannot skip: Only one item in playlist")
+            currentPlayer.prepare()
+            currentPlayer.play()
+            return
+        }
+
+        isAutoSkipping = true
         try {
-            val currentPlayer = player ?: return
-            val totalItems = currentPlayer.mediaItemCount
-            
-            if (totalItems <= 1) {
-                Log.w(TAG, "No other stations to skip to")
-                showPlaybackError(reason, "No other stations available")
-                isAutoSkipping = false
-                return
-            }
-            
-            // Try to find next playable station
+            var nextIndex = (currentPlayer.currentMediaItemIndex + 1) % totalItems
             var attempts = 0
-            val maxAttempts = totalItems // Try every station in the list once
-            var nextIndex = currentPlayer.currentMediaItemIndex
             
-            while (attempts < maxAttempts) {
-                nextIndex = (nextIndex + 1) % totalItems
-                val nextMediaItem = currentPlayer.getMediaItemAt(nextIndex)
-                val nextMediaId = nextMediaItem.mediaId
+            Log.i(TAG, "Station Hunt: Searching for next playable station starting from index $nextIndex")
+            
+            // Loop through the timeline until we find something that doesn't have an empty URL
+            while (attempts < totalItems) {
+                val nextItem = currentPlayer.getMediaItemAt(nextIndex)
+                val url = nextItem.localConfiguration?.uri?.toString() ?: ""
                 
-                Log.d(TAG, "Attempting to skip to station at index $nextIndex: $nextMediaId")
-                
-                // Even if it failed before, we try it again during auto-skip 
-                // unless it's fundamentally broken (missing URL)
-                val nextUrl = nextMediaItem.localConfiguration?.uri?.toString() ?: ""
-                if (nextUrl.isNotBlank()) {
-                    Log.i(TAG, "Skipping to next station: $nextMediaId (Reason: $reason)")
+                if (url.isNotBlank()) {
+                    Log.d(TAG, "Station Hunt: Found potential station at $nextIndex (${nextItem.mediaId})")
                     currentPlayer.seekToDefaultPosition(nextIndex)
                     currentPlayer.prepare()
                     currentPlayer.play()
-                    break
-                } else {
-                    Log.d(TAG, "Skipping station with empty URL: $nextMediaId")
-                    attempts++
+                    return // Success - the next error (if any) will re-trigger this
                 }
+                
+                Log.d(TAG, "Station Hunt: Index $nextIndex has no URL, skipping...")
+                nextIndex = (nextIndex + 1) % totalItems
+                attempts++
             }
             
-            if (attempts >= maxAttempts) {
-                Log.e(TAG, "All stations failed to play")
-                showPlaybackError(reason, "All stations failed to play. Please check your internet connection.")
-                // Reset failed stations after complete failure
-                failedStations.clear()
-            }
-            
+            Log.e(TAG, "Station Hunt: Exhausted all $totalItems items. None are playable.")
+            showPlaybackError(reason, "No playable stations found in list")
         } catch (e: Exception) {
-            Log.e(TAG, "Error during station skip", e)
-            showPlaybackError(reason, "Failed to skip to next station")
+            Log.e(TAG, "Critical error during Station Hunt", e)
         } finally {
             isAutoSkipping = false
         }
