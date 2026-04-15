@@ -29,8 +29,7 @@ data class UiState(
     val failedStationIds: Set<String> = emptySet(),
     val workingStationIds: Set<String> = emptySet(),
     val playbackError: String? = null,
-    val filter: StationFilter = StationFilter.ALL,
-    val isFilteringStations: Boolean = false  // true while background health check is running
+    val filter: StationFilter = StationFilter.ALL
 )
 
 class StationsViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,51 +46,11 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
 
     init { 
         // Don't load stations here — BrowseScreen handles initial loading via its
-        // LaunchedEffect to avoid race conditions between competing station lists.
+        // Initial load of favorite/failed statuses
         loadStationStatuses()
-        startPeriodicHealthCheck()
     }
     
-    /**
-     * Continuous background health checker
-     * - Checks ALL unchecked stations using a HEAD request
-     * - Stations that fail are persisted to DB and never shown again
-     * - Previously failed stations are NOT re-checked (HEAD != stream playable)
-     */
-    private fun startPeriodicHealthCheck() = viewModelScope.launch(Dispatchers.IO) {
-        // Initial delay before starting
-        delay(10_000L) // Wait 10 seconds after app start
-        
-        while (true) {
-            // Get all unchecked stations
-            val uncheckedStations = _browse.value.stations.filter { station ->
-                val id = station.stationuuid
-                !_browse.value.workingStationIds.contains(id) && 
-                !_browse.value.failedStationIds.contains(id)
-            }
-            
-            // Check all unchecked stations
-            for (station in uncheckedStations) {
-                try {
-                    val isReachable = checkUrlReachable(station.urlResolved)
-                    if (isReachable) {
-                        markStationWorkingSilent(station.stationuuid)
-                    } else {
-                        markStationFailedSilent(station.stationuuid)
-                    }
-                } catch (e: Exception) {
-                    // Ignore individual failures
-                }
-                delay(500) // 500ms between checks to be gentle on network
-            }
-            
-            // After checking all unchecked stations, wait 2 minutes before next cycle.
-            // Previously failed stations are intentionally NOT re-checked:
-            // HEAD responses can be 200 even when the actual audio stream is dead.
-            // Stations are only un-marked when the user successfully plays them (STATE_READY).
-            delay(2 * 60 * 1000L)
-        }
-    }
+
     
     private fun loadStationStatuses() = viewModelScope.launch {
         val working = statusDao.getWorkingStationIds().toSet()
@@ -107,8 +66,6 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
     // Helper to update stations and trigger background health check
     private fun updateStations(stations: List<Station>) {
         _browse.value = _browse.value.copy(loading = false, stations = stations, error = null)
-        // Trigger silent background health check
-        runBackgroundHealthCheck(stations)
     }
 
     fun loadTop() = viewModelScope.launch {
@@ -235,98 +192,7 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     
-    // Flag to prevent multiple concurrent health checks
-    private var isCheckingHealth = false
-    
-    /**
-     * Background health checker - runs silently without UI notifications
-     * Checks ALL unchecked station URLs to see if they're reachable
-     * Called automatically when stations are loaded
-     */
-    private fun runBackgroundHealthCheck(stations: List<Station>) = viewModelScope.launch(Dispatchers.IO) {
-        if (isCheckingHealth) return@launch
-        isCheckingHealth = true
-        withContext(Dispatchers.Main) {
-            _browse.value = _browse.value.copy(isFilteringStations = true)
-        }
-        
-        try {
-            val uncheckedStations = stations.filter { station ->
-                val id = station.stationuuid
-                !_browse.value.workingStationIds.contains(id) && !_browse.value.failedStationIds.contains(id)
-            }
-            
-            for (station in uncheckedStations) {
-                try {
-                    val isReachable = checkUrlReachable(station.urlResolved)
-                    if (isReachable) {
-                        markStationWorkingSilent(station.stationuuid)
-                    } else {
-                        markStationFailedSilent(station.stationuuid)
-                    }
-                } catch (e: Exception) {
-                    // Silently ignore individual check failures
-                }
-                delay(300) // 300ms between checks
-            }
-        } finally {
-            isCheckingHealth = false
-            withContext(Dispatchers.Main) {
-                _browse.value = _browse.value.copy(isFilteringStations = false)
-            }
-        }
-    }
-    
-    // Silent versions that don't trigger UI updates for playback error
-    private fun markStationWorkingSilent(stationId: String) = viewModelScope.launch {
-        _browse.value = _browse.value.copy(
-            workingStationIds = _browse.value.workingStationIds + stationId,
-            failedStationIds = _browse.value.failedStationIds - stationId
-        )
-        if (!statusDao.exists(stationId)) {
-            statusDao.upsert(StationStatusEntity(stationuuid = stationId, lastStatus = "working", playCount = 1, lastPlayedTimestamp = System.currentTimeMillis()))
-        } else {
-            statusDao.markWorking(stationId)
-        }
-    }
-    
-    private fun markStationFailedSilent(stationId: String) = viewModelScope.launch {
-        _browse.value = _browse.value.copy(
-            failedStationIds = _browse.value.failedStationIds + stationId,
-            workingStationIds = _browse.value.workingStationIds - stationId
-        )
-        if (!statusDao.exists(stationId)) {
-            statusDao.upsert(StationStatusEntity(stationuuid = stationId, lastStatus = "failed", failCount = 1, lastFailedTimestamp = System.currentTimeMillis()))
-        } else {
-            statusDao.markFailed(stationId)
-        }
-    }
-    
-    /**
-     * Quick URL reachability check - just checks if we can connect
-     */
-    private suspend fun checkUrlReachable(url: String): Boolean = withContext(Dispatchers.IO) {
-        if (url.isBlank()) return@withContext false
-        var connection: HttpURLConnection? = null
-        try {
-            connection = URL(url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 12000 // 12 seconds for slow networks
-            connection.readTimeout = 12000    // 12 seconds for slow networks
-            // Use a standard browser User-Agent to avoid 403/Forbidden from radio servers
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-            // Use GET instead of HEAD because many radio servers (Icecast/Shoutcast) 
-            connection.requestMethod = "GET"
-            connection.instanceFollowRedirects = true
-            
-            // We only care about the response code, we don't need to read the stream
-            val responseCode = connection.responseCode
-            responseCode in 200..399
-        } catch (e: Exception) {
-            false
-        } finally {
-            connection?.disconnect()
-        }
-    }
+
     
     /**
      * Clear failed status for a station (for retry)

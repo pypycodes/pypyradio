@@ -149,7 +149,8 @@ class RadioPlaybackService : MediaLibraryService() {
 
             // Define browser-like User-Agent to prevent radio servers from blocking the player.
             // Matching the User-Agent used in StationsViewModel health checks.
-            val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            // Standard mobile identity for maximum stream compatibility
+            val userAgent = "ExoPlayer/2.0 (AACMixRadioPlayer)"
             val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent(userAgent)
                 .setAllowCrossProtocolRedirects(true)
@@ -571,25 +572,14 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                                 null
                             }
                         } else {
-                            // If not found in cache/db, check if the item already has a URI (passthrough)
+                            // UI provided URIs are PRIORITY - trust them and play instantly (1.0.94 style)
                             if (item.localConfiguration?.uri != null) {
-                                Log.d(TAG, "Trusting UI provided URI for $mediaId")
                                 item
                             } else {
-                                // Check if it's a podcast episode
+                                // Check if it's a podcast episode (cache only)
                                 val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
-                                if (episode != null) {
-                                    if (isValidEpisode(episode)) {
-                                        if (item.localConfiguration == null) {
-                                            playablePodcastEpisodeItem(episode)
-                                        } else {
-                                            item
-                                        }
-                                    } else {
-                                        Log.w(TAG, "Episode validation failed: ${episode.title} ($mediaId)")
-                                        failedStations.add(mediaId)
-                                        null
-                                    }
+                                if (episode != null && isValidEpisode(episode)) {
+                                    if (item.localConfiguration == null) playablePodcastEpisodeItem(episode) else item
                                 } else {
                                     Log.w(TAG, "Unknown media item without URI: $mediaId")
                                     null

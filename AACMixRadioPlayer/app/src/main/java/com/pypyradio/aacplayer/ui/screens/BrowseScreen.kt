@@ -173,7 +173,7 @@ fun BrowseScreen(
             val windowedStations: List<Station>
             val startIndexInWindow: Int
             if (selectedIndex >= 0) {
-                val window = 100
+                val window = 25
                 val fromIndex = maxOf(0, selectedIndex - window)
                 val toIndex = minOf(displayStations.size, selectedIndex + window + 1)
                 windowedStations = displayStations.subList(fromIndex, toIndex)
@@ -383,42 +383,7 @@ fun BrowseScreen(
                 com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
             }
 
-            // Filtering banner — visible while background health check is pruning dead stations
-            AnimatedVisibility(
-                visible = state.isFilteringStations,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.width(20.dp).height(2.dp),
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            "Scanning stations for playability…",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Spacer(Modifier.weight(1f))
-                        if (state.failedStationIds.isNotEmpty()) {
-                            Text(
-                                "${state.failedStationIds.size} offline",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            }
+
 
             // Station count and current category label
             if (!state.loading && state.error == null && displayStations.isNotEmpty()) {
