@@ -219,10 +219,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     private fun loadStations() {
         serviceScope.launch {
             try {
-                val loaded = stationRepo.getFilteredAacStations(limit = 100)
+                // Increase initial load for better coverage in Android Auto
+                val loaded = stationRepo.getFilteredAacStations(limit = 200)
                 if (loaded.isNotEmpty()) {
                     cachedStations = loaded
-                    Log.d(TAG, "Loaded ${loaded.size} stations from API")
+                    Log.i(TAG, "Cached ${loaded.size} high-quality stations for instant access")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Station load error", e)
@@ -527,24 +528,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         loadFavoritesInternal()
                     }
                     
-                    // Resolve items from cache and validate before playback
+                    // Resolve items from cache (instant)
                     val resolvedItems = mediaItems.mapNotNull { item ->
                         val mediaId = item.mediaId
                         
-                        // Check if it's a station (check all possible sources)
+                        // Check if it's a station (check caches first)
                         var station = cachedStations.find { it.stationuuid == mediaId } 
                             ?: cachedFavorites.find { it.stationuuid == mediaId }
                         
-                        // If not found in caches, try to load it dynamically asynchronously
+                        // If not found in primary caches, try to find in recommendations (still fast)
                         if (station == null) {
-                            station = try {
-                                // Try to find in English stations
-                                val englishStations = stationRepo.getEnglishStations(200)
-                                englishStations.find { it.stationuuid == mediaId }
-                                    ?: // Try to find in Indian stations
-                                    stationRepo.getIndianStations(200).find { it.stationuuid == mediaId }
+                            try {
+                                // Use a fast repository call - since we are in a suspend block (future)
+                                // we can call this directly if it doesn't hit network, or launch another job
+                                station = stationRepo.getRecommendedStations(20).find { it.stationuuid == mediaId }
                             } catch (e: Exception) {
-                                Log.e(TAG, "Failed to resolve station $mediaId", e)
                                 null
                             }
                         }
@@ -703,10 +701,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     private fun startBufferingTimeoutCheck() {
         cancelBufferingTimeoutCheck()
         bufferingTimeoutJob = serviceScope.launch {
-            delay(20000) // 20 seconds timeout for buffering (accounting for slow networks)
+            delay(12000) // 12 seconds timeout (reduced from 20s for snappier experience)
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
-                Log.w(TAG, "Buffering timeout - treating as error")
+                Log.w(TAG, "Buffering timeout (12s) - auto-skipping to next station")
                 handlePlaybackError(RuntimeException("Buffering timeout - station may be dead"))
             }
         }
