@@ -96,29 +96,26 @@ fun BrowseScreen(
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
-                isBuffering = p.playbackState == Player.STATE_BUFFERING
+                // Only show buffering if we aren't actually playing audio
+                isBuffering = p.playbackState == Player.STATE_BUFFERING && !p.isPlaying
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> currentPlayingId?.let { vm.markStationWorking(it) }
+                    Player.STATE_READY -> {
+                        currentPlayingId?.let { vm.markStationWorking(it) }
+                    }
                     Player.STATE_ENDED -> {
-                        // Use player.currentMediaItem (authoritative) not cached currentPlayingId
-                        // to avoid stale IPC events marking the wrong station as failed.
                         val failedId = player.currentMediaItem?.mediaId ?: return
                         vm.markStationFailed(failedId, "Stream ended unexpectedly")
                         if (player.mediaItemCount <= 1) {
                             autoAdvanceFromId = failedId
                         }
-                        // Multi-item case handled by service onPlaybackStateChanged
                     }
                 }
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // Use player.currentMediaItem (authoritative) not cached currentPlayingId.
-                // Stale IPC error events from previous playlist arrive after the user
-                // taps a new station, and currentPlayingId may already point to the new station.
                 val failedId = player.currentMediaItem?.mediaId ?: return
                 vm.markStationFailed(failedId, "Playback failed")
                 if (player.mediaItemCount <= 1) {
@@ -129,7 +126,7 @@ fun BrowseScreen(
         player.addListener(listener)
         currentPlayingId = player.currentMediaItem?.mediaId
         isPlaying = player.isPlaying
-        isBuffering = player.playbackState == Player.STATE_BUFFERING
+        isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         onDispose { player.removeListener(listener) }
     }
     

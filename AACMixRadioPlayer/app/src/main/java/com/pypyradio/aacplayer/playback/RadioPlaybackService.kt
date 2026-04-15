@@ -586,12 +586,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         showPlaybackError("No valid stations", "All selected stations failed validation")
                         MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
                     } else {
-                        Log.d(TAG, "Setting ${resolvedItems.size} validated items to player, starting at index $startIndex")
-                        player?.stop()
-                        player?.setMediaItems(resolvedItems, startIndex, startPositionMs)
-                        player?.prepare()
-                        player?.play()
-                        
+                        Log.d(TAG, "Successfully resolved ${resolvedItems.size} items for session")
                         MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
                     }
                 }
@@ -812,35 +807,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     }
     
     private fun showPlaybackError(reason: String, details: String) {
-        Log.w(TAG, "Playback error - Reason: $reason, Details: $details")
+        Log.e(TAG, "Playback error - Reason: $reason, Details: $details")
         
-        // You could show a notification or toast here
-        // For now, we'll just log it
-        serviceScope.launch {
-            try {
-                // Update media metadata to show error state
-                player?.let { player ->
-                    val currentMediaItem = player.currentMediaItem
-                    if (currentMediaItem != null) {
-                        val errorMetadata = MediaMetadata.Builder()
-                            .setTitle("Playback Error")
-                            .setArtist(details)
-                            .setGenre("Error")
-                            .build()
-                        
-                        val errorItem = MediaItem.Builder()
-                            .setMediaId("error")
-                            .setUri(currentMediaItem.localConfiguration?.uri)
-                            .setMediaMetadata(errorMetadata)
-                            .build()
-                        
-                        player.setMediaItem(errorItem)
-                        player.prepare()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to show error metadata", e)
-            }
-        }
+        // We no longer replace the media item with an error item, 
+        // as that destroys the playlist and disables Next/Prev controls.
+        // Instead, we just log and let skipToNextStation handle the recovery.
     }
 }
