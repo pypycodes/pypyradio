@@ -55,7 +55,8 @@ fun SimpleNowPlayingBar(
                 mediaId = p.currentMediaItem?.mediaId
                 artworkUrl = p.currentMediaItem?.mediaMetadata?.artworkUri?.toString()
                 isPlaying = p.isPlaying
-                isBuffering = p.playbackState == Player.STATE_BUFFERING
+                // Only show buffering UI if we aren't actually playing audio yet
+                isBuffering = p.playbackState == Player.STATE_BUFFERING && !p.isPlaying
                 isStopped = p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED
                 hasNext = p.hasNextMediaItem()
                 hasPrevious = p.hasPreviousMediaItem()
@@ -111,7 +112,7 @@ fun SimpleNowPlayingBar(
         mediaId = player.currentMediaItem?.mediaId
         artworkUrl = player.currentMediaItem?.mediaMetadata?.artworkUri?.toString()
         isPlaying = player.isPlaying
-        isBuffering = player.playbackState == Player.STATE_BUFFERING
+        isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         isStopped = player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
         hasError = player.playerError != null
         hasNext = player.hasNextMediaItem()
@@ -234,8 +235,8 @@ fun SimpleNowPlayingBar(
                     IconButton(
                         onClick = { 
                             player.seekToPreviousMediaItem()
-                            player.prepare()
-                            player.play()
+                            player.prepare() // Ensure ready
+                            player.play()    // Forced play
                         },
                         enabled = hasPrevious,
                         modifier = Modifier.size(48.dp)
@@ -288,8 +289,8 @@ fun SimpleNowPlayingBar(
                     IconButton(
                         onClick = { 
                             player.seekToNextMediaItem()
-                            player.prepare()
-                            player.play()
+                            player.prepare() // Ensure ready
+                            player.play()    // Forced play
                         },
                         enabled = hasNext,
                         modifier = Modifier.size(48.dp)

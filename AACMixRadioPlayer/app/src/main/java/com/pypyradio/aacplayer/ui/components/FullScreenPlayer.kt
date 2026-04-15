@@ -47,7 +47,8 @@ fun FullScreenPlayer(
         isPlaying = player.isPlaying
         hasNext = player.hasNextMediaItem()
         hasPrev = player.hasPreviousMediaItem()
-        isBuffering = player.playbackState == Player.STATE_BUFFERING
+        // Only show buffering UI if we aren't actually playing audio yet
+        isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
     }
 
     DisposableEffect(player) {
@@ -164,7 +165,11 @@ fun FullScreenPlayer(
             ) {
                 // Prev
                 IconButton(
-                    onClick = { player.seekToPreviousMediaItem() },
+                    onClick = { 
+                        player.seekToPreviousMediaItem()
+                        player.prepare()
+                        player.play()
+                    },
                     enabled = hasPrev,
                     modifier = Modifier.size(56.dp)
                 ) {
@@ -205,7 +210,11 @@ fun FullScreenPlayer(
                 
                 // Next
                 IconButton(
-                    onClick = { player.seekToNextMediaItem() },
+                    onClick = { 
+                        player.seekToNextMediaItem()
+                        player.prepare()
+                        player.play()
+                    },
                     enabled = hasNext,
                     modifier = Modifier.size(56.dp)
                 ) {
