@@ -530,57 +530,33 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 if (mediaItems.isEmpty()) {
                     MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
                 } else {
-                    // Ensure data is loaded before resolving items asynchronously
-                    if (cachedStations.isEmpty()) {
-                        loadStationsInternal()
-                    }
-                    if (cachedPodcasts.isEmpty()) {
-                        loadPodcastsInternal()
-                    }
-                    if (cachedFavorites.isEmpty()) {
-                        loadFavoritesInternal()
-                    }
-                    
-                    // Resolve items from cache (instant)
+                    // Resolve items from the provided list (instant passthrough)
                     val resolvedItems = mediaItems.mapNotNull { item ->
                         val mediaId = item.mediaId
                         
-                        // Check if it's a station (check caches first)
-                        var station = cachedStations.find { it.stationuuid == mediaId } 
-                            ?: cachedFavorites.find { it.stationuuid == mediaId }
-                        
-                        // If not found in primary caches, try to find in recommendations (still fast)
-                        if (station == null) {
-                            station = try {
-                                // Use a fast repository call - since we are in a suspend block (future)
-                                stationRepo.getRecommendedStations(20).find { it.stationuuid == mediaId }
-                            } catch (e: Exception) {
-                                null
-                            }
-                        }
-                        
-                        if (station != null && isValidStation(station)) {
-                            if (item.localConfiguration == null) playableItem(station) else item
-                        } else {
-                            // UI provided URIs are PRIORITY - trust them and play instantly (1.0.94 style)
-                            // Check BOTH localConfiguration and requestMetadata (Binder IPC safe)
-                            val backupUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
-                            if (backupUri != null) {
-                                // Important: Ensure the item has a valid Configuration if it's missing
-                                if (item.localConfiguration == null) {
-                                    item.buildUpon()
-                                        .setUri(backupUri)
-                                        .build()
-                                } else {
-                                    item
-                                }
+                        // 1. UI provided URIs are TOP PRIORITY - play instantly (no lookup delay)
+                        // Check BOTH RequestMetadata and localConfiguration
+                        val passthroughUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
+                        if (passthroughUri != null) {
+                            if (item.localConfiguration == null) {
+                                item.buildUpon().setUri(passthroughUri).build()
                             } else {
-                                // Check if it's a podcast episode (cache only)
+                                item
+                            }
+                        } else {
+                            // 2. Fallback: Check internal caches if URI is missing (e.g. from Auto browser)
+                            var station = cachedStations.find { it.stationuuid == mediaId } 
+                                ?: cachedFavorites.find { it.stationuuid == mediaId }
+                            
+                            if (station != null && isValidStation(station)) {
+                                playableItem(station)
+                            } else {
+                                // 3. Fallback: Check if it's a podcast episode
                                 val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
                                 if (episode != null && isValidEpisode(episode)) {
-                                    if (item.localConfiguration == null) playablePodcastEpisodeItem(episode) else item
+                                    playablePodcastEpisodeItem(episode)
                                 } else {
-                                    Log.w(TAG, "Unknown media item without URI: $mediaId")
+                                    Log.w(TAG, "Media item missing URI and not in cache: $mediaId")
                                     null
                                 }
                             }
@@ -588,12 +564,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     }
                     
                     if (resolvedItems.isEmpty()) {
-                        Log.w(TAG, "No valid media items after validation")
-                        showPlaybackError("No valid stations", "All selected stations failed validation")
+                        Log.w(TAG, "No valid media items after passthrough resolution")
+                        showPlaybackError("No valid stations", "All selected stations missing URIs")
                         MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
                     } else {
-                        // CRITICAL: Recalculate startIndex based on where the original target item ended up.
-                        // This prevents the "reset to Index 0" bug if some items were filtered out.
+                        // Recalculate startIndex based on where the target item ended up
                         val targetItem = mediaItems.getOrNull(startIndex)
                         val newIndex = if (targetItem != null) {
                             val found = resolvedItems.indexOfFirst { it.mediaId == targetItem.mediaId }
@@ -602,7 +577,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             0
                         }
                         
-                        Log.d(TAG, "Successfully resolved ${resolvedItems.size} items. New startIndex=$newIndex")
+                        Log.d(TAG, "Resolved ${resolvedItems.size} items instantly via Passthrough. startIndex=$newIndex")
                         MediaSession.MediaItemsWithStartPosition(resolvedItems, newIndex, startPositionMs)
                     }
                 }
