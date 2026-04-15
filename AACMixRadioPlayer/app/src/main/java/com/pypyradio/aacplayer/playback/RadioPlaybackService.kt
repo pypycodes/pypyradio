@@ -538,10 +538,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         
                         // If not found in primary caches, try to find in recommendations (still fast)
                         if (station == null) {
-                            try {
+                            station = try {
                                 // Use a fast repository call - since we are in a suspend block (future)
-                                // we can call this directly if it doesn't hit network, or launch another job
-                                station = stationRepo.getRecommendedStations(20).find { it.stationuuid == mediaId }
+                                stationRepo.getRecommendedStations(20).find { it.stationuuid == mediaId }
                             } catch (e: Exception) {
                                 null
                             }
