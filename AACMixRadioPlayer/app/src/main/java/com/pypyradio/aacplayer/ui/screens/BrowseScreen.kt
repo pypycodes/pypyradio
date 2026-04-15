@@ -73,7 +73,6 @@ fun BrowseScreen(
     vm: StationsViewModel,
     player: Player,
     onGoAbout: () -> Unit = {},
-    onGoAbout: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {

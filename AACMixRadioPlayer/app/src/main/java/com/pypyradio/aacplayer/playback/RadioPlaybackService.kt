@@ -161,24 +161,9 @@ class RadioPlaybackService : MediaLibraryService() {
                 )
                 .build()
             
-            // Set session to support playlist navigation
-            session?.availableSessionCommands = MediaSession.ConnectionHints.Builder()
-                .build()
-                .let { hints ->
-                    val commands = MediaSession.availableSessionCommands.buildUpon()
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_CHILDREN)
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_ITEM)
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_GET_LIBRARY_ROOT)
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_SEARCH)
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_SUBSCRIBE)
-                        .add(SessionCommand.COMMAND_CODE_LIBRARY_UNSUBSCRIBE)
-                        .build()
-                    commands
-                }
-            
             // Note: Media3 handles standard Player commands (SKIP_TO_NEXT/PREVIOUS)
             // if the Player.Listener reports them as available. ExoPlayer handles this automatically
-            // if it has a playlist items.
+            // if it has multiple media items in the timeline.
 
             // Notification
             setMediaNotificationProvider(DefaultMediaNotificationProvider(this))
