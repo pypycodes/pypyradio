@@ -191,7 +191,7 @@ fun BrowseScreen(
                     .setMediaId(displaySt.stationuuid)
                     .setUri(displaySt.urlResolved)
                     .setRequestMetadata(
-                        MediaItem.RequestMetadata.Builder()
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
                             .setMediaUri(android.net.Uri.parse(displaySt.urlResolved))
                             .build()
                     )

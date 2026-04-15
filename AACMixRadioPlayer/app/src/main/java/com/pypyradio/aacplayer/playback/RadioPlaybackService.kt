@@ -559,22 +559,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             }
                         }
                         
-                        if (station != null) {
-                            if (isValidStation(station)) {
+                        if (station != null && isValidStation(station)) {
+                            if (item.localConfiguration == null) playableItem(station) else item
+                        } else {
+                            // UI provided URIs are PRIORITY - trust them and play instantly (1.0.94 style)
+                            // Check BOTH localConfiguration and requestMetadata (Binder IPC safe)
+                            val backupUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
+                            if (backupUri != null) {
+                                // Important: Ensure the item has a valid Configuration if it's missing
                                 if (item.localConfiguration == null) {
-                                    playableItem(station)
+                                    item.buildUpon()
+                                        .setUri(backupUri)
+                                        .build()
                                 } else {
                                     item
                                 }
-                            } else {
-                                Log.w(TAG, "Station validation failed: ${station.name} ($mediaId)")
-                                failedStations.add(mediaId)
-                                null
-                            }
-                        } else {
-                            // UI provided URIs are PRIORITY - trust them and play instantly (1.0.94 style)
-                            if (item.localConfiguration?.uri != null) {
-                                item
                             } else {
                                 // Check if it's a podcast episode (cache only)
                                 val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
@@ -593,8 +592,18 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         showPlaybackError("No valid stations", "All selected stations failed validation")
                         MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
                     } else {
-                        Log.d(TAG, "Successfully resolved ${resolvedItems.size} items for session")
-                        MediaSession.MediaItemsWithStartPosition(resolvedItems, startIndex, startPositionMs)
+                        // CRITICAL: Recalculate startIndex based on where the original target item ended up.
+                        // This prevents the "reset to Index 0" bug if some items were filtered out.
+                        val targetItem = mediaItems.getOrNull(startIndex)
+                        val newIndex = if (targetItem != null) {
+                            val found = resolvedItems.indexOfFirst { it.mediaId == targetItem.mediaId }
+                            if (found >= 0) found else 0
+                        } else {
+                            0
+                        }
+                        
+                        Log.d(TAG, "Successfully resolved ${resolvedItems.size} items. New startIndex=$newIndex")
+                        MediaSession.MediaItemsWithStartPosition(resolvedItems, newIndex, startPositionMs)
                     }
                 }
             } catch (e: Exception) {
