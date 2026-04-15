@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [FavoriteStationEntity::class, FavoritePodcastEntity::class, StationStatusEntity::class], version = 3, exportSchema = false)
+@Database(entities = [FavoriteStationEntity::class, FavoritePodcastEntity::class, StationStatusEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun favoritesDao(): FavoriteStationDao
     abstract fun favoritePodcastDao(): FavoritePodcastDao
@@ -48,6 +48,17 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
             }
         }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add indices to favorite_stations
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_stations_stationuuid ON favorite_stations(stationuuid)")
+                
+                // Add indices to station_status
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_station_status_stationuuid ON station_status(stationuuid)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_station_status_lastStatus ON station_status(lastStatus)")
+            }
+        }
         
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
@@ -56,7 +67,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "aac_radio.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
             }
