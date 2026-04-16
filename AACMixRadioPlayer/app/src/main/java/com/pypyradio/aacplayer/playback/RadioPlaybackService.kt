@@ -759,10 +759,12 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 }
                 Player.STATE_ENDED -> {
                     Log.d(TAG, "Player state: ENDED")
-                    // Auto-advance to next station
-                    if (!isAutoSkipping) {
-                        skipToNextStation("Playback ended")
-                    }
+                    // For live radio streams, STATE_ENDED is a normal event
+                    // (server disconnects briefly, stream rotates, etc.).
+                    // Do NOT auto-skip — just let the player sit in ENDED state.
+                    // The user can tap Next or Retry. The BrowseScreen UI will
+                    // NOT mark this as a failure (we removed that earlier).
+                    cancelBufferingTimeoutCheck()
                 }
             }
         }
@@ -829,7 +831,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             // Loop through the timeline until we find something that doesn't have an empty URL
             while (attempts < totalItems) {
                 val nextItem = currentPlayer.getMediaItemAt(nextIndex)
-                val url = nextItem.localConfiguration?.uri?.toString() ?: ""
+                // Check both localConfiguration (set by service) and requestMetadata (survives IPC)
+                val url = nextItem.localConfiguration?.uri?.toString()
+                    ?: nextItem.requestMetadata.mediaUri?.toString()
+                    ?: ""
                 
                 if (url.isNotBlank()) {
                     Log.d(TAG, "Station Hunt: Found potential station at $nextIndex (${nextItem.mediaId})")
