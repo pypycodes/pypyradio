@@ -52,6 +52,7 @@ fun FavoritesScreen(
     var selectedTab by remember { mutableStateOf(FavoritesTab.RADIO) }
     var currentPlayingId by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
     
     // Listen to player state with auto-skip on error
@@ -60,6 +61,7 @@ fun FavoritesScreen(
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
+                isBuffering = p.playbackState == Player.STATE_BUFFERING && !p.isPlaying
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -67,10 +69,16 @@ fun FavoritesScreen(
                     currentPlayingId?.let { vm.markStationWorking(it) }
                 }
             }
+            
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val failedId = player.currentMediaItem?.mediaId ?: return
+                vm.markStationFailed(failedId, "Playback failed")
+            }
         }
         player.addListener(listener)
         currentPlayingId = player.currentMediaItem?.mediaId
         isPlaying = player.isPlaying
+        isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         onDispose { player.removeListener(listener) }
     }
     
@@ -259,11 +267,14 @@ fun FavoritesScreen(
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(validRadioFavs, key = { it.stationuuid }) { st ->
                                 val isFailed = failedStationIds.contains(st.stationuuid)
-                                val isCurrentPlaying = currentPlayingId == st.stationuuid && isPlaying
+                                val isCurrentStation = currentPlayingId == st.stationuuid
+                                val isCurrentPlaying = isCurrentStation && isPlaying
+                                val isCurrentBuffering = isCurrentStation && isBuffering
                                 FavStationRow(
                                     st = st,
                                     isFailed = isFailed,
                                     isPlaying = isCurrentPlaying,
+                                    isBuffering = isCurrentBuffering,
                                     onRowClick = { playStation(st) },
                                     onRemove = { vm.toggleFavorite(st) }
                                 )
@@ -345,23 +356,24 @@ private fun FavStationRow(
     st: Station, 
     isFailed: Boolean = false,
     isPlaying: Boolean, 
+    isBuffering: Boolean = false,
     onRowClick: () -> Unit, 
     onRemove: () -> Unit
 ) {
+    val isActive = isPlaying || isBuffering
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPlaying) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            } else if (isFailed) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-            } else {
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surface
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isPlaying) 4.dp else 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp),
         onClick = onRowClick
     ) {
         Row(
@@ -375,20 +387,28 @@ private fun FavStationRow(
             ) {
                 AsyncImage(model = st.favicon, contentDescription = null, modifier = Modifier.fillMaxSize().padding(4.dp))
                 
-                if (isFailed) {
+                if (isFailed && !isActive) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
                         Surface(
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                             shape = androidx.compose.foundation.shape.CircleShape,
-                            color = Color.White
+                            color = Color(0xFFFFF3E0)
                         ) {
                             Icon(
                                 Icons.Default.Warning,
-                                contentDescription = "Failed",
-                                modifier = Modifier.padding(1.dp),
-                                tint = Color(0xFFFFB300)
+                                contentDescription = "May be offline",
+                                modifier = Modifier.padding(2.dp),
+                                tint = Color(0xFFFF9800)
                             )
                         }
+                    }
+                } else if (isBuffering) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -404,17 +424,35 @@ private fun FavStationRow(
                 Spacer(Modifier.height(2.dp))
                 val meta = listOfNotNull(st.countryCode, st.codec, st.bitrate?.let { "${it}kbps" }).joinToString(" • ")
                 Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                if (isPlaying) {
-                    Spacer(Modifier.height(4.dp))
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    ) {
+                when {
+                    isBuffering -> {
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            "Playing",
+                            "Connecting...",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    isPlaying -> {
+                        Spacer(Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                "Playing",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    isFailed -> {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "May be offline · Tap to retry",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -429,18 +467,26 @@ private fun FavStationRow(
             FilledTonalIconButton(
                 onClick = onRowClick,
                 modifier = Modifier.size(40.dp),
-                colors = if (isPlaying) {
+                colors = if (isActive) {
                     IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
                 } else {
                     IconButtonDefaults.filledTonalIconButtonColors()
                 }
             ) {
-                Icon(
-                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
