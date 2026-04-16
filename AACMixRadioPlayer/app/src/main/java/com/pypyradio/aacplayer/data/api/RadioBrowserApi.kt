@@ -27,6 +27,9 @@ interface RadioBrowserApi {
 
     @GET("json/url/{stationuuid}")
     suspend fun pingClick(@Path("stationuuid") id: String): Response<Unit>
+
+    @GET("json/stations/byuuid/{stationuuid}")
+    suspend fun getStationByUuid(@Path("stationuuid") id: String): List<StationDto>
 }
 
 data class StationDto(

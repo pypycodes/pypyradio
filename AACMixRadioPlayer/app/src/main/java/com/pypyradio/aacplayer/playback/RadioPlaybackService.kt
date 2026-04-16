@@ -467,16 +467,18 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             mediaId: String
-        ): ListenableFuture<LibraryResult<MediaItem>> {
-            return try {
-                val station = cachedStations.find { it.stationuuid == mediaId }
-                if (station != null) {
-                    Futures.immediateFuture(LibraryResult.ofItem(playableItem(station), null))
+        ): ListenableFuture<LibraryResult<MediaItem>> = serviceScope.future {
+            Log.d(TAG, "onGetItem: $mediaId")
+            try {
+                val item = resolveFromCache(mediaId)
+                if (item != null) {
+                    LibraryResult.ofItem(item, null)
                 } else {
-                    Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
                 }
             } catch (e: Exception) {
-                Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+                Log.e(TAG, "onGetItem error", e)
+                LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
             }
         }
 
@@ -484,36 +486,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
-        ): ListenableFuture<MutableList<MediaItem>> {
+        ): ListenableFuture<MutableList<MediaItem>> = serviceScope.future {
             Log.d(TAG, "onAddMediaItems: ${mediaItems.size} items")
-            return try {
-                val resolvedItems = mediaItems.map { item ->
+            try {
+                mediaItems.map { item ->
                     val mediaId = item.mediaId
                     
-                    // Check if it's a station
-                    val station = cachedStations.find { it.stationuuid == mediaId }
-                    if (station != null && item.localConfiguration == null) {
-                        playableItem(station)
-                    } else if (station != null) {
-                        item
-                    } else {
-                        // Check if it's a podcast episode
-                        val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
-                        if (episode != null && item.localConfiguration == null) {
-                            playablePodcastEpisodeItem(episode)
-                        } else if (episode != null) {
-                            item
-                        } else {
-                            // Fallback to item as-is
-                            item
-                        }
-                    }
+                    // Already has URI? Keep it.
+                    if (item.localConfiguration?.uri != null) return@map item
+                    
+                    // Resolve from cache/repository
+                    resolveFromCache(mediaId) ?: item
                 }.toMutableList()
-                
-                Futures.immediateFuture(resolvedItems)
             } catch (e: Exception) {
                 Log.e(TAG, "onAddMediaItems error", e)
-                Futures.immediateFuture(mediaItems)
+                mediaItems
             }
         }
 
@@ -537,18 +524,20 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     if (passthroughUri != null) {
                         // === UI-INITIATED PLAYBACK ===
                         // UI provided URIs — resolve instantly (no lookup delay)
-                        val resolvedItems = mediaItems.mapNotNull { item ->
+                        val resolvedItems = mutableListOf<MediaItem>()
+                        for (item in mediaItems) {
                             val itemUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
-                            if (itemUri != null) {
+                            val resolved = if (itemUri != null) {
                                 if (item.localConfiguration == null) {
                                     item.buildUpon().setUri(itemUri).build()
                                 } else {
                                     item
                                 }
                             } else {
-                                // Fallback: resolve from cache
+                                // Fallback: resolve from cache (suspend call)
                                 resolveFromCache(item.mediaId)
                             }
+                            if (resolved != null) resolvedItems.add(resolved)
                         }
                         
                         if (resolvedItems.isEmpty()) {
@@ -599,18 +588,51 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         
         /**
          * Resolve a single mediaId from internal caches (stations, favorites, podcasts)
+         * or fallback to database/API lookup for search/browse results.
          */
-        private fun resolveFromCache(mediaId: String): MediaItem? {
-            val station = cachedStations.find { it.stationuuid == mediaId }
-                ?: cachedFavorites.find { it.stationuuid == mediaId }
+        private suspend fun resolveFromCache(mediaId: String): MediaItem? {
+            // 1. Check top stations cache
+            var station = cachedStations.find { it.stationuuid == mediaId }
+            
+            // 2. Check favorites
+            if (station == null) {
+                station = cachedFavorites.find { it.stationuuid == mediaId }
+            }
+            
+            // 3. New: Check ActivePlaylistCache (this contains what the user is seeing in the phone UI)
+            if (station == null) {
+                station = ActivePlaylistCache.currentBrowseItems.find { it.stationuuid == mediaId }
+            }
+            
+            // 4. Fallback: Query the database/API directly (most robust)
+            if (station == null) {
+                Log.d(TAG, "Station $mediaId not in cache, attempting repository lookup")
+                station = try {
+                    stationRepo.getStationByUuid(mediaId)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Repository lookup failed for $mediaId", e)
+                    null
+                }
+                
+                // If found, add to cachedStations so future lookups are faster
+                station?.let { 
+                    if (cachedStations.size < 500) {
+                        cachedStations = cachedStations + it
+                    }
+                }
+            }
+
             if (station != null && isValidStation(station)) {
                 return playableItem(station)
             }
+            
+            // 5. Podcast episodes
             val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
             if (episode != null && isValidEpisode(episode)) {
                 return playablePodcastEpisodeItem(episode)
             }
-            Log.w(TAG, "Media item not in cache: $mediaId")
+            
+            Log.w(TAG, "Media item could not be resolved: $mediaId")
             return null
         }
         
@@ -627,7 +649,16 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 return items to index
             }
             
-            // 2. Check cachedStations (top stations, loaded at startup)
+            // 2. Check ActivePlaylistCache (what the user is currently browsing on the phone)
+            // This is the most accurate context for search results and specific categories.
+            if (ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == tappedMediaId }) {
+                val items = ActivePlaylistCache.currentBrowseItems.filter { isValidStation(it) }.map(::playableItem)
+                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                Log.d(TAG, "Auto playlist from Active Browse Cache: ${items.size} items")
+                return items to index
+            }
+            
+            // 3. Check cachedStations (top stations, loaded at startup)
             if (cachedStations.any { it.stationuuid == tappedMediaId }) {
                 val items = cachedStations.filter { isValidStation(it) }.map(::playableItem)
                 val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
