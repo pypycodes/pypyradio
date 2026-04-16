@@ -503,7 +503,6 @@ private fun StationRow(
     onFavorite: () -> Unit
 ) {
     val isActive = isPlaying || isBuffering
-    val isErrorState = hasError || (isFailed && !isActive)
     
     // Pulsing animation for buffering
     val infiniteTransition = rememberInfiniteTransition(label = "buffering")

@@ -370,6 +370,15 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
         runCatching { RadioBrowserClient.api().pingClick(stationuuid) }
     }
 
+    suspend fun getStationByUuid(stationuuid: String): Station? {
+        return try {
+            val result = RadioBrowserClient.api().getStationByUuid(stationuuid)
+            result.firstOrNull()?.toDomain()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun StationDto.toDomain(): Station =
         Station(
             stationuuid = stationuuid,
