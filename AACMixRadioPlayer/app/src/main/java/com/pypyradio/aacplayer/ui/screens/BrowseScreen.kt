@@ -18,19 +18,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
-import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Category definition for browse chips
@@ -78,8 +85,10 @@ fun BrowseScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var lastPlayTime by remember { mutableStateOf(0L) }
-    // Triggers UI-side auto-advance when service can't skip (single-item queue)
-    var autoAdvanceFromId by remember { mutableStateOf<String?>(null) }
+    var bufferingStartTime by remember { mutableStateOf(0L) }
+    var isSlowConnection by remember { mutableStateOf(false) }
+    var hasPlaybackError by remember { mutableStateOf(false) }
+    var playbackErrorMessage by remember { mutableStateOf<String?>(null) }
     
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
@@ -90,44 +99,73 @@ fun BrowseScreen(
         state.stations.filter { it.urlResolved.isNotBlank() }
     }
     
-    // Listen to player state
+    // Listen to player state — only handle actual errors, not STATE_ENDED
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onEvents(p: Player, events: Player.Events) {
                 currentPlayingId = p.currentMediaItem?.mediaId
                 isPlaying = p.isPlaying
+                val wasBuffering = isBuffering
                 // Only show buffering if we aren't actually playing audio
                 isBuffering = p.playbackState == Player.STATE_BUFFERING && !p.isPlaying
+                // Track when buffering started for "slow connection" message
+                if (isBuffering && !wasBuffering) {
+                    bufferingStartTime = System.currentTimeMillis()
+                    isSlowConnection = false
+                } else if (!isBuffering) {
+                    isSlowConnection = false
+                }
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_READY -> {
+                        // Station is playing successfully
                         currentPlayingId?.let { vm.markStationWorking(it) }
+                        hasPlaybackError = false
+                        playbackErrorMessage = null
                     }
-                    Player.STATE_ENDED -> {
-                        val failedId = player.currentMediaItem?.mediaId ?: return
-                        vm.markStationFailed(failedId, "Stream ended unexpectedly")
-                        if (player.mediaItemCount <= 1) {
-                            autoAdvanceFromId = failedId
-                        }
-                    }
+                    // STATE_ENDED is normal for live streams — do NOT mark as failed
                 }
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val failedId = player.currentMediaItem?.mediaId ?: return
                 vm.markStationFailed(failedId, "Playback failed")
-                if (player.mediaItemCount <= 1) {
-                    autoAdvanceFromId = failedId
+                hasPlaybackError = true
+                playbackErrorMessage = when {
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ->
+                        "Network error"
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                        "Connection timed out"
+                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+                        "Stream unavailable"
+                    else -> "Station offline"
                 }
+            }
+            
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Clear error state when moving to a new station
+                hasPlaybackError = false
+                playbackErrorMessage = null
             }
         }
         player.addListener(listener)
         currentPlayingId = player.currentMediaItem?.mediaId
         isPlaying = player.isPlaying
         isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
+        hasPlaybackError = player.playerError != null
         onDispose { player.removeListener(listener) }
+    }
+    
+    // Slow connection detection — show "Taking longer than usual..." after 8 seconds
+    LaunchedEffect(isBuffering, bufferingStartTime) {
+        if (isBuffering && bufferingStartTime > 0) {
+            delay(8000L)
+            if (isBuffering) {
+                isSlowConnection = true
+            }
+        }
     }
     
     // Play a station with a windowed playlist for proper next/prev support.
@@ -137,11 +175,11 @@ fun BrowseScreen(
     fun playStation(st: Station) {
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
-        // Cancel any pending auto-advance so it doesn't override the user's manual choice
-        autoAdvanceFromId = null
+        hasPlaybackError = false
+        playbackErrorMessage = null
         val now = System.currentTimeMillis()
-        // 100ms debounce: prevent accidental double-tap, but don't block quick station switching
-        if (now - lastPlayTime < 100) return
+        // 300ms debounce: prevent accidental double-tap
+        if (now - lastPlayTime < 300) return
         lastPlayTime = now
 
         val url = st.urlResolved
@@ -156,7 +194,10 @@ fun BrowseScreen(
             if (player.isPlaying) {
                 player.pause()
             } else {
-                player.prepare()
+                // Only re-prepare if player is idle/ended, NOT if just paused
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
                 player.play()
             }
             return
@@ -250,16 +291,8 @@ fun BrowseScreen(
         vm.loadTop()
     }
 
-    // Auto-advance when a tapped station fails and the queue has only 1 item
-    LaunchedEffect(autoAdvanceFromId) {
-        val fromId = autoAdvanceFromId ?: return@LaunchedEffect
-        kotlinx.coroutines.delay(400L)
-        val failedIdx = displayStations.indexOfFirst { it.stationuuid == fromId }
-        val nextStation = displayStations.getOrNull(failedIdx + 1)
-            ?: displayStations.getOrNull(failedIdx - 1)
-        nextStation?.let { playStation(it) }
-        autoAdvanceFromId = null
-    }
+    // No more UI-side auto-advance — the service handles playlist navigation.
+    // The UI just shows the error state and lets the user retry or pick another station.
     
     Scaffold(
         topBar = {
@@ -430,6 +463,9 @@ fun BrowseScreen(
                             val isCurrentStation = currentPlayingId == st.stationuuid
                             val isCurrentlyPlaying = isCurrentStation && isPlaying
                             val isCurrentlyBuffering = isCurrentStation && isBuffering
+                            val isCurrentError = isCurrentStation && hasPlaybackError
+                            val currentErrorMsg = if (isCurrentStation) playbackErrorMessage else null
+                            val showSlowConnection = isCurrentStation && isSlowConnection
                             
                             StationRow(
                                 st = st,
@@ -437,7 +473,11 @@ fun BrowseScreen(
                                 isFavorite = isFavorite,
                                 isPlaying = isCurrentlyPlaying,
                                 isBuffering = isCurrentlyBuffering,
+                                hasError = isCurrentError,
+                                errorMessage = currentErrorMsg,
+                                isSlowConnection = showSlowConnection,
                                 onRowClick = { playStation(st) },
+                                onRetry = { playStation(st) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
                         }
@@ -455,23 +495,45 @@ private fun StationRow(
     isFavorite: Boolean,
     isPlaying: Boolean,
     isBuffering: Boolean = false,
+    hasError: Boolean = false,
+    errorMessage: String? = null,
+    isSlowConnection: Boolean = false,
     onRowClick: () -> Unit, 
+    onRetry: () -> Unit = onRowClick,
     onFavorite: () -> Unit
 ) {
     val isActive = isPlaying || isBuffering
+    val isErrorState = hasError || (isFailed && !isActive)
+    
+    // Pulsing animation for buffering
+    val infiniteTransition = rememberInfiniteTransition(label = "buffering")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+    
+    // Animated container color
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            hasError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+            isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            else -> MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(300),
+        label = "containerColor"
+    )
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) 
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) 
-            else if (isFailed)
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
-            else 
-                MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp),
         onClick = onRowClick
     ) {
@@ -482,7 +544,9 @@ private fun StationRow(
             // Station artwork with status indicator
             Box(modifier = Modifier.size(48.dp)) {
                 Surface(
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .then(if (isBuffering) Modifier.alpha(pulseAlpha) else Modifier),
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
@@ -493,37 +557,55 @@ private fun StationRow(
                     )
                 }
                 // Status badge
-                if (isBuffering) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else if (isPlaying) {
-                    Surface(
-                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.padding(2.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary
+                when {
+                    hasError -> {
+                        Surface(
+                            modifier = Modifier.size(18.dp).align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.error
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Error",
+                                modifier = Modifier.padding(2.dp),
+                                tint = MaterialTheme.colorScheme.onError
+                            )
+                        }
+                    }
+                    isBuffering -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp).align(Alignment.BottomEnd),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
-                } else if (isFailed) {
-                    Surface(
-                        modifier = Modifier.size(16.dp).align(Alignment.BottomEnd),
-                        shape = CircleShape,
-                        color = Color.White
-                    ) {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = "Failed",
-                            modifier = Modifier.padding(1.dp),
-                            tint = Color(0xFFFFB300) // Yellow/Amber warning mark
-                        )
+                    isPlaying -> {
+                        Surface(
+                            modifier = Modifier.size(18.dp).align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = Color(0xFF4CAF50)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.padding(2.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    isFailed -> {
+                        Surface(
+                            modifier = Modifier.size(18.dp).align(Alignment.BottomEnd),
+                            shape = CircleShape,
+                            color = Color(0xFFFFF3E0)
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Previously failed",
+                                modifier = Modifier.padding(2.dp),
+                                tint = Color(0xFFFF9800)
+                            )
+                        }
                     }
                 }
             }
@@ -536,9 +618,12 @@ private fun StationRow(
                     st.name, 
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isActive) MaterialTheme.colorScheme.primary 
-                            else if (isFailed) MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                            else MaterialTheme.colorScheme.onSurface,
+                    color = when {
+                        hasError -> MaterialTheme.colorScheme.error
+                        isActive -> MaterialTheme.colorScheme.primary
+                        isFailed -> MaterialTheme.colorScheme.onSurfaceVariant
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
                     maxLines = 1, 
                     overflow = TextOverflow.Ellipsis
                 )
@@ -574,20 +659,96 @@ private fun StationRow(
                         )
                     }
                 }
-                // Status text for active station
-                if (isBuffering) {
-                    Text(
-                        "Connecting...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary
+                // Status text — contextual and informative
+                when {
+                    hasError -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    errorMessage ?: "Station offline",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Text(
+                                "· Tap to retry",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    isBuffering && isSlowConnection -> {
+                        Text(
+                            "Taking longer than usual...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.alpha(pulseAlpha)
+                        )
+                    }
+                    isBuffering -> {
+                        Text(
+                            "Connecting...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.alpha(pulseAlpha)
+                        )
+                    }
+                    isPlaying -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(Color(0xFF4CAF50), CircleShape)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Live",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
+                    isFailed -> {
+                        Text(
+                            "May be offline · Tap to retry",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+            
+            // Retry button for error/failed state
+            if (hasError || (isFailed && !isActive)) {
+                FilledTonalIconButton(
+                    onClick = onRetry,
+                    modifier = Modifier.size(36.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = if (hasError)
+                            MaterialTheme.colorScheme.errorContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
                     )
-                } else if (isPlaying) {
-                    Text(
-                        "Now Playing",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Retry",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (hasError)
+                            MaterialTheme.colorScheme.onErrorContainer
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Spacer(Modifier.width(4.dp))
             }
             
             // Favorite button

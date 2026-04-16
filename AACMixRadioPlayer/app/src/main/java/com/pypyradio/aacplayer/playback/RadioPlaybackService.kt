@@ -530,61 +530,153 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 if (mediaItems.isEmpty()) {
                     MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
                 } else {
-                    // Resolve items from the provided list (instant passthrough)
-                    val resolvedItems = mediaItems.mapNotNull { item ->
-                        val mediaId = item.mediaId
-                        
-                        // 1. UI provided URIs are TOP PRIORITY - play instantly (no lookup delay)
-                        // Check BOTH RequestMetadata and localConfiguration
-                        val passthroughUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
-                        if (passthroughUri != null) {
-                            if (item.localConfiguration == null) {
-                                item.buildUpon().setUri(passthroughUri).build()
-                            } else {
-                                item
-                            }
-                        } else {
-                            // 2. Fallback: Check internal caches if URI is missing (e.g. from Auto browser)
-                            var station = cachedStations.find { it.stationuuid == mediaId } 
-                                ?: cachedFavorites.find { it.stationuuid == mediaId }
-                            
-                            if (station != null && isValidStation(station)) {
-                                playableItem(station)
-                            } else {
-                                // 3. Fallback: Check if it's a podcast episode
-                                val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
-                                if (episode != null && isValidEpisode(episode)) {
-                                    playablePodcastEpisodeItem(episode)
-                                } else {
-                                    Log.w(TAG, "Media item missing URI and not in cache: $mediaId")
-                                    null
-                                }
-                            }
-                        }
-                    }
+                    // Check if this is a UI-initiated play (has URI) or Auto browser click (no URI)
+                    val firstItem = mediaItems.first()
+                    val passthroughUri = firstItem.requestMetadata.mediaUri ?: firstItem.localConfiguration?.uri
                     
-                    if (resolvedItems.isEmpty()) {
-                        Log.w(TAG, "No valid media items after passthrough resolution")
-                        showPlaybackError("No valid stations", "All selected stations missing URIs")
-                        MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
-                    } else {
-                        // Recalculate startIndex based on where the target item ended up
-                        val targetItem = mediaItems.getOrNull(startIndex)
-                        val newIndex = if (targetItem != null) {
-                            val found = resolvedItems.indexOfFirst { it.mediaId == targetItem.mediaId }
-                            if (found >= 0) found else 0
-                        } else {
-                            0
+                    if (passthroughUri != null) {
+                        // === UI-INITIATED PLAYBACK ===
+                        // UI provided URIs — resolve instantly (no lookup delay)
+                        val resolvedItems = mediaItems.mapNotNull { item ->
+                            val itemUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
+                            if (itemUri != null) {
+                                if (item.localConfiguration == null) {
+                                    item.buildUpon().setUri(itemUri).build()
+                                } else {
+                                    item
+                                }
+                            } else {
+                                // Fallback: resolve from cache
+                                resolveFromCache(item.mediaId)
+                            }
                         }
                         
-                        Log.d(TAG, "Resolved ${resolvedItems.size} items instantly via Passthrough. startIndex=$newIndex")
-                        MediaSession.MediaItemsWithStartPosition(resolvedItems, newIndex, startPositionMs)
+                        if (resolvedItems.isEmpty()) {
+                            Log.w(TAG, "No valid media items after passthrough resolution")
+                            showPlaybackError("No valid stations", "All selected stations missing URIs")
+                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
+                        } else {
+                            val targetItem = mediaItems.getOrNull(startIndex)
+                            val newIndex = if (targetItem != null) {
+                                val found = resolvedItems.indexOfFirst { it.mediaId == targetItem.mediaId }
+                                if (found >= 0) found else 0
+                            } else 0
+                            
+                            Log.d(TAG, "Resolved ${resolvedItems.size} items via UI Passthrough. startIndex=$newIndex")
+                            MediaSession.MediaItemsWithStartPosition(resolvedItems, newIndex, startPositionMs)
+                        }
+                    } else {
+                        // === ANDROID AUTO BROWSER CLICK ===
+                        // Auto sends just 1 item with mediaId, no URI.
+                        // Build the FULL category playlist so Next/Prev steering wheel controls work.
+                        val tappedMediaId = firstItem.mediaId
+                        Log.d(TAG, "Android Auto single-item play: $tappedMediaId — expanding to full playlist")
+                        
+                        // Find which category this station belongs to and build playlist
+                        val (playlist, tappedIndex) = buildAutoPlaylist(tappedMediaId)
+                        
+                        if (playlist.isEmpty()) {
+                            Log.w(TAG, "Could not build Auto playlist for: $tappedMediaId")
+                            // Fallback: try to resolve just the single item
+                            val single = resolveFromCache(tappedMediaId)
+                            if (single != null) {
+                                MediaSession.MediaItemsWithStartPosition(listOf(single), 0, startPositionMs)
+                            } else {
+                                showPlaybackError("Station not found", "Could not resolve: $tappedMediaId")
+                                MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
+                            }
+                        } else {
+                            Log.i(TAG, "Auto playlist: ${playlist.size} items, startIndex=$tappedIndex")
+                            MediaSession.MediaItemsWithStartPosition(playlist, tappedIndex, startPositionMs)
+                        }
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "onSetMediaItems error", e)
                 MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
             }
+        }
+        
+        /**
+         * Resolve a single mediaId from internal caches (stations, favorites, podcasts)
+         */
+        private fun resolveFromCache(mediaId: String): MediaItem? {
+            val station = cachedStations.find { it.stationuuid == mediaId }
+                ?: cachedFavorites.find { it.stationuuid == mediaId }
+            if (station != null && isValidStation(station)) {
+                return playableItem(station)
+            }
+            val episode = cachedEpisodes.values.flatten().find { it.id == mediaId }
+            if (episode != null && isValidEpisode(episode)) {
+                return playablePodcastEpisodeItem(episode)
+            }
+            Log.w(TAG, "Media item not in cache: $mediaId")
+            return null
+        }
+        
+        /**
+         * Build a full playlist for Android Auto from the category the tapped station belongs to.
+         * Returns (playlistItems, startIndex) where startIndex points to the tapped station.
+         */
+        private suspend fun buildAutoPlaylist(tappedMediaId: String): Pair<List<MediaItem>, Int> {
+            // 1. Check favorites first (most common use case)
+            if (cachedFavorites.any { it.stationuuid == tappedMediaId }) {
+                val items = cachedFavorites.filter { isValidStation(it) }.map(::playableItem)
+                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                Log.d(TAG, "Auto playlist from Favorites: ${items.size} items")
+                return items to index
+            }
+            
+            // 2. Check cachedStations (top stations, loaded at startup)
+            if (cachedStations.any { it.stationuuid == tappedMediaId }) {
+                val items = cachedStations.filter { isValidStation(it) }.map(::playableItem)
+                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                Log.d(TAG, "Auto playlist from Top Stations: ${items.size} items")
+                return items to index
+            }
+            
+            // 3. Try loading specific categories to find the station
+            // Try English stations
+            try {
+                val english = stationRepo.getEnglishStations(50)
+                if (english.any { it.stationuuid == tappedMediaId }) {
+                    val items = english.filter { isValidStation(it) }.map(::playableItem)
+                    val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                    Log.d(TAG, "Auto playlist from English: ${items.size} items")
+                    return items to index
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to check English stations", e)
+            }
+            
+            // Try Indian stations
+            try {
+                val indian = stationRepo.getIndianStations(50)
+                if (indian.any { it.stationuuid == tappedMediaId }) {
+                    val items = indian.filter { isValidStation(it) }.map(::playableItem)
+                    val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                    Log.d(TAG, "Auto playlist from Indian: ${items.size} items")
+                    return items to index
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to check Indian stations", e)
+            }
+            
+            // 4. Podcast episodes
+            val allEpisodes = cachedEpisodes.values.flatten()
+            val episode = allEpisodes.find { it.id == tappedMediaId }
+            if (episode != null) {
+                // Find the podcast this episode belongs to and return all episodes as playlist
+                val podcastId = cachedEpisodes.entries.find { (_, eps) -> eps.any { it.id == tappedMediaId } }?.key
+                val podcastEpisodes = podcastId?.let { cachedEpisodes[it] } ?: listOf(episode)
+                val items = podcastEpisodes.filter { isValidEpisode(it) }.map(::playablePodcastEpisodeItem)
+                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+                Log.d(TAG, "Auto playlist from Podcast: ${items.size} episodes")
+                return items to index
+            }
+            
+            // 5. Fallback: return empty (caller will try single-item resolution)
+            return emptyList<MediaItem>() to 0
         }
 
         private fun browsableItem(id: String, title: String): MediaItem {
@@ -687,10 +779,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     private fun startBufferingTimeoutCheck() {
         cancelBufferingTimeoutCheck()
         bufferingTimeoutJob = serviceScope.launch {
-            delay(12000) // 12 seconds timeout (reduced from 20s for snappier experience)
+            delay(20000) // 20 seconds timeout - give slow networks a fair chance
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
-                Log.w(TAG, "Buffering timeout (12s) - auto-skipping to next station")
+                Log.w(TAG, "Buffering timeout (20s) - auto-skipping to next station")
                 handlePlaybackError(RuntimeException("Buffering timeout - station may be dead"))
             }
         }
