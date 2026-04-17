@@ -567,39 +567,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     
                     Log.d(TAG, "Atomic play request for: $tappedMediaId")
 
-                    // 1. Try to build a full playlist from the Active Cache (UI sync)
-                    var targetPlaylist: List<MediaItem> = emptyList()
-                    var targetIndex = 0
-                    
-                    val cachedStations = ActivePlaylistCache.currentBrowseItems
-                    val foundIndex = cachedStations.indexOfFirst { it.stationuuid == tappedMediaId }
-                    
-                    if (foundIndex >= 0) {
-                        Log.d(TAG, "Expanding playlist from ActivePlaylistCache (size ${cachedStations.size})")
-                        // Use a massive window of 301 items total inside the service.
-                        // Since the service is now in the same process, we don't have to worry
-                        // about the 1MB Binder limit breaking the initial play request.
-                        // Drop the massive window down to something safer.
-                        // While same-process removes some IPC, Media3 still serializes
-                        // the timeline internally using Bundles for its Controller loop!
-                        // 301 items was silently crashing the Bundle packer.
-                        // A window of 15 (31 items total) provides great scrollability 
-                        // while staying safely underneath any internal serialization limits.
-                        val window = 15
-                        val from = maxOf(0, foundIndex - window)
-                        val to = minOf(cachedStations.size, foundIndex + window + 1)
-                        val slice = cachedStations.subList(from, to)
-                        
-                        targetPlaylist = slice.mapNotNull(::playableItem)
-                        targetIndex = targetPlaylist.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                    } else {
-                        // 2. Fallback to Auto expansion (Favorites, Categories, etc.)
-                        val (autoList, autoIndex) = buildAutoPlaylist(tappedMediaId)
-                        if (autoList.isNotEmpty()) {
-                            targetPlaylist = autoList
-                            targetIndex = autoIndex
-                        }
-                    }
+                    // 1. Fallback to Auto expansion (Favorites, Podcasts)
+                    val (autoList, autoIndex) = buildAutoPlaylist(tappedMediaId)
+                    var targetPlaylist = autoList
+                    var targetIndex = autoIndex
 
                     val safePos = if (startPositionMs <= 0L) androidx.media3.common.C.TIME_UNSET else startPositionMs
                     if (targetPlaylist.isNotEmpty()) {
@@ -697,54 +668,14 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             return items to index
         }
         
-        /**
-         * Build a full playlist for Android Auto from the category the tapped station belongs to.
-         * Returns (playlistItems, startIndex) where startIndex points to the tapped station.
-         */
         private suspend fun buildAutoPlaylist(tappedMediaId: String): Pair<List<MediaItem>, Int> {
-            // 1. Check favorites first (most common use case)
+            // 1. Check favorites first (most common use case where Next/Prev is heavily used)
             windowedPlaylist(cachedFavorites, tappedMediaId)?.let {
                 Log.d(TAG, "Auto playlist from Favorites: ${it.first.size} items")
                 return it
             }
             
-            // 2. Check ActivePlaylistCache (what the user is currently browsing on the phone)
-            // This is the most accurate context for search results and specific categories.
-            windowedPlaylist(ActivePlaylistCache.currentBrowseItems, tappedMediaId)?.let {
-                Log.d(TAG, "Auto playlist from Active Browse Cache: ${it.first.size} items")
-                return it
-            }
-            
-            // 3. Check cachedStations (top stations, loaded at startup)
-            windowedPlaylist(cachedStations, tappedMediaId)?.let {
-                Log.d(TAG, "Auto playlist from Top Stations: ${it.first.size} items")
-                return it
-            }
-            
-            // 3. Try loading specific categories to find the station
-            // Try English stations
-            try {
-                val english = stationRepo.getEnglishStations(50)
-                windowedPlaylist(english, tappedMediaId)?.let {
-                    Log.d(TAG, "Auto playlist from English: ${it.first.size} items")
-                    return it
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to check English stations", e)
-            }
-            
-            // Try Indian stations
-            try {
-                val indian = stationRepo.getIndianStations(50)
-                windowedPlaylist(indian, tappedMediaId)?.let {
-                    Log.d(TAG, "Auto playlist from Indian: ${it.first.size} items")
-                    return it
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to check Indian stations", e)
-            }
-            
-            // 4. Podcast episodes
+            // 2. Podcast episodes
             val allEpisodes = cachedEpisodes.values.flatten()
             val episode = allEpisodes.find { it.id == tappedMediaId }
             if (episode != null) {

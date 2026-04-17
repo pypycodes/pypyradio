@@ -175,9 +175,6 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
-        // Update the background service's cache with the latest category list
-        // This allows the service to building a Next/Prev playlist internally.
-        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
         
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
@@ -216,19 +213,20 @@ fun BrowseScreen(
         }
 
         try {
+            // MICRO-WINDOW PLAYBACK: 
+            // We use an ultra small window (2 before, current, 2 after) 
+            // to allow basic ability to skip a broken station via Next/Prev 
+            // continuously while staying vastly under Android UI IPC memory limits.
             val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            val window = 15
+            val window = 2 // Exact offset size for mini Next/Prev behavior
             val from = maxOf(0, foundIndex - window)
             val to = minOf(displayStations.size, foundIndex + window + 1)
             
             val slice = displayStations.subList(from, to)
             
-            // SUPER LIGHTWEIGHT PLAYBACK:
-            // Send exactly what ExoPlayer needs to locate the files, without bloating 
-            // the IPC Binder with heavy metadata (Titles, base64 images, etc).
-            // The service's onAddMediaItems will automatically hydrate the metadata 
-            // from the ActivePlaylistCache database silently in the background!
             val mediaItems = slice.map { station ->
+                val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
                 MediaItem.Builder()
                     .setMediaId(station.stationuuid)
                     .setUri(station.urlResolved)
@@ -237,11 +235,21 @@ fun BrowseScreen(
                             .setMediaUri(android.net.Uri.parse(station.urlResolved))
                             .build()
                     )
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(station.name.take(100))
+                            .setArtist(station.countryCode ?: "Radio")
+                            .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
+                            .setArtworkUri(artUri)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .setIsPlayable(true)
+                            .build()
+                    )
                     .build()
             }
             
             val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-
+            
             player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                 player.prepare()
