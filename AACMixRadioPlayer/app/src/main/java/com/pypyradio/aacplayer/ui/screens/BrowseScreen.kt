@@ -216,35 +216,41 @@ fun BrowseScreen(
         }
 
         try {
-            // REVAMP: ATOMIC PLAYBACK
-            // Instead of calculating complex windows in the UI, we send ONE item.
-            // The RadioPlaybackService will expand this into a proper playlist internally.
-            val cleanFavicon = st.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
-            val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(st.stationuuid)
-                .setUri(st.urlResolved)
-                .setRequestMetadata(
-                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
-                        .build()
-                )
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(st.name.take(100))
-                        .setArtist(st.countryCode ?: "Radio")
-                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
-                        .setArtworkUri(artUri)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                        .setIsPlayable(true)
-                        .build()
-                )
-                .build()
+            val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
+            val window = 15
+            val from = maxOf(0, foundIndex - window)
+            val to = minOf(displayStations.size, foundIndex + window + 1)
+            
+            val slice = displayStations.subList(from, to)
+            val mediaItems = slice.map { station ->
+                val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+                val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
+                MediaItem.Builder()
+                    .setMediaId(station.stationuuid)
+                    .setUri(station.urlResolved)
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(android.net.Uri.parse(station.urlResolved))
+                            .build()
+                    )
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(station.name.take(100))
+                            .setArtist(station.countryCode ?: "Radio")
+                            .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
+                            .setArtworkUri(artUri)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            }
+            
+            val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
 
-            // We removed the explicit player.stop() and clearMediaItems(). 
-            // ExoPlayer's setMediaItem() replaces the entire timeline automatically.
-            // Explicitly pausing/stopping it synchronously here breaks the async MediaSession loader.
-            player.setMediaItem(mediaItem)
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaItems(mediaItems, targetIndex, 0L)
             player.prepare()
             player.play()
             
