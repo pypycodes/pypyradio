@@ -564,8 +564,13 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         // Use a massive window of 301 items total inside the service.
                         // Since the service is now in the same process, we don't have to worry
                         // about the 1MB Binder limit breaking the initial play request.
-                        // This behaves exactly like Spotify (continuous scrolling).
-                        val window = 150
+                        // Drop the massive window down to something safer.
+                        // While same-process removes some IPC, Media3 still serializes
+                        // the timeline internally using Bundles for its Controller loop!
+                        // 301 items was silently crashing the Bundle packer.
+                        // A window of 15 (31 items total) provides great scrollability 
+                        // while staying safely underneath any internal serialization limits.
+                        val window = 15
                         val from = maxOf(0, foundIndex - window)
                         val to = minOf(cachedStations.size, foundIndex + window + 1)
                         val slice = cachedStations.subList(from, to)
