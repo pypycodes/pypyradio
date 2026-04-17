@@ -62,8 +62,7 @@
         <service
             android:name=".playback.RadioPlaybackService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true"
-            android:process=".music">
+            android:exported="true">
             <!-- Media3 MediaLibraryService intent filter -->
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
