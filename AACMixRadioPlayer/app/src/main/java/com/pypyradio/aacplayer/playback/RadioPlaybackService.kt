@@ -527,14 +527,8 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             isAutoSkipping = false
             cancelBufferingTimeoutCheck()
             
-            // CRITICAL: SUPER HARD RESET
-            try {
-                player?.stop()
-                player?.clearMediaItems()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to perform internal player reset", e)
-            }
-            
+            // (Removed async player.stop() because UI and Service now share the same 
+            // player instance, and this async call was overwriting the UI's play command)
             try {
                 val firstItem = mediaItems.firstOrNull()
                 if (firstItem == null) {
