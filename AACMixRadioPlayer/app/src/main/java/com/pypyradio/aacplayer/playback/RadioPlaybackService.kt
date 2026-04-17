@@ -704,50 +704,49 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 )
                 .build()
         }
+    } // End of RadioLibraryCallback
 
-        private fun playableItem(station: Station): MediaItem? {
-            return try {
-                // Ensure we have a valid playable URL string to avoid MediaItem.Builder crashes
-                val uriStr = station.urlResolved.takeIf { it.isNotBlank() } ?: ""
-                
-                MediaItem.Builder()
-                    .setMediaId(station.stationuuid)
-                    .setUri(uriStr)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(station.name.take(100))
-                            .setArtist(station.countryCode?.take(10) ?: "Unknown")
-                            .setGenre(station.tags?.take(50) ?: "Radio")
-                            .setAlbumTitle(station.language?.take(50)?.let { "$it Radio" } ?: "Radio")
-                            .setIsBrowsable(false)
-                            .setIsPlayable(true)
-                            .build()
-                    )
-                    .build()
-            } catch (e: Exception) {
-                Log.w(TAG, "Skipping station ${station.stationuuid} due to unparseable URL", e)
-                null
-            }
-        }
-
-        
-        private fun playablePodcastEpisodeItem(episode: PodcastEpisode): MediaItem {
-            return MediaItem.Builder()
-                .setMediaId(episode.id)
-                .setUri(episode.audioUrl)
+    private fun playableItem(station: Station): MediaItem? {
+        return try {
+            // Ensure we have a valid playable URL string to avoid MediaItem.Builder crashes
+            val uriStr = station.urlResolved.takeIf { it.isNotBlank() } ?: ""
+            
+            MediaItem.Builder()
+                .setMediaId(station.stationuuid)
+                .setUri(uriStr)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(episode.title)
-                        .setArtist(episode.podcastTitle ?: "")
-                        .setGenre("Podcast")
+                        .setTitle(station.name.take(100))
+                        .setArtist(station.countryCode?.take(10) ?: "Unknown")
+                        .setGenre(station.tags?.take(50) ?: "Radio")
+                        .setAlbumTitle(station.language?.take(50)?.let { "$it Radio" } ?: "Radio")
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
                         .build()
                 )
                 .build()
+        } catch (e: Exception) {
+            Log.w(TAG, "Skipping station ${station.stationuuid} due to unparseable URL", e)
+            null
         }
     }
 
+    
+    private fun playablePodcastEpisodeItem(episode: PodcastEpisode): MediaItem {
+        return MediaItem.Builder()
+            .setMediaId(episode.id)
+            .setUri(episode.audioUrl)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(episode.title)
+                    .setArtist(episode.podcastTitle ?: "")
+                    .setGenre("Podcast")
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .build()
+            )
+            .build()
+    }
     /**
      * Player listener for handling playback errors and automatic station skipping
      */
