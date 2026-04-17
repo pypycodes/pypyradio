@@ -216,29 +216,33 @@ fun BrowseScreen(
         }
 
         try {
-            val cleanFavicon = st.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
-            val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(st.stationuuid)
-                .setUri(st.urlResolved)
-                .setRequestMetadata(
-                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
-                        .build()
-                )
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(st.name.take(100))
-                        .setArtist(st.countryCode ?: "Radio")
-                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
-                        .setArtworkUri(artUri)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                        .setIsPlayable(true)
-                        .build()
-                )
-                .build()
+            val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
+            val window = 15
+            val from = maxOf(0, foundIndex - window)
+            val to = minOf(displayStations.size, foundIndex + window + 1)
+            
+            val slice = displayStations.subList(from, to)
+            
+            // SUPER LIGHTWEIGHT PLAYBACK:
+            // Send exactly what ExoPlayer needs to locate the files, without bloating 
+            // the IPC Binder with heavy metadata (Titles, base64 images, etc).
+            // The service's onAddMediaItems will automatically hydrate the metadata 
+            // from the ActivePlaylistCache database silently in the background!
+            val mediaItems = slice.map { station ->
+                MediaItem.Builder()
+                    .setMediaId(station.stationuuid)
+                    .setUri(station.urlResolved)
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(android.net.Uri.parse(station.urlResolved))
+                            .build()
+                    )
+                    .build()
+            }
+            
+            val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
 
-            player.setMediaItem(mediaItem)
+            player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                 player.prepare()
             }

@@ -556,9 +556,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             item.buildUpon().setUri(uri).build()
                         } else item
                     }
-                    MediaSession.MediaItemsWithStartPosition(resolved, startIndex, startPositionMs)
+                    val safePos = if (startPositionMs <= 0L) androidx.media3.common.C.TIME_UNSET else startPositionMs
+                    MediaSession.MediaItemsWithStartPosition(resolved, startIndex, safePos)
                 } else {
-                    // === ATOMIC SINGLE-ITEM PLAYBACK (The Revamp) ===
+                    // === ATOMIC SINGLE-ITEM PLAYBACK (Android Auto logic) ===
                     // The UI now only sends ONE item. We expand it here internally
                     // to provide full Next/Prev support without Binder overhead.
                     val tappedMediaId = firstItem.mediaId
