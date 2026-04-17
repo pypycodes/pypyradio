@@ -84,12 +84,26 @@ fun FavoritesScreen(
     }
     
     fun createStationMediaItem(station: Station): MediaItem {
+        val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+        val artworkUri = cleanFavicon?.let {
+            android.net.Uri.parse(it)
+        }
         return MediaItem.Builder()
             .setMediaId(station.stationuuid)
             .setUri(station.urlResolved)
             .setRequestMetadata(
                 androidx.media3.common.MediaItem.RequestMetadata.Builder()
                     .setMediaUri(android.net.Uri.parse(station.urlResolved))
+                    .build()
+            )
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(station.name)
+                    .setArtist(station.countryCode ?: "Radio")
+                    .setAlbumTitle("Favorites")
+                    .setArtworkUri(artworkUri)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .setIsPlayable(true)
                     .build()
             )
             .build()
