@@ -90,7 +90,6 @@ fun BrowseScreen(
     var isSlowConnection by remember { mutableStateOf(false) }
     var hasPlaybackError by remember { mutableStateOf(false) }
     var playbackErrorMessage by remember { mutableStateOf<String?>(null) }
-    var isProcessingPlay by remember { mutableStateOf(false) }
     
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
@@ -158,11 +157,6 @@ fun BrowseScreen(
         isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         hasPlaybackError = player.playerError != null
         
-        // Reset interaction lock when player state changes or transitions
-        if (player.playbackState != Player.STATE_IDLE) {
-            isProcessingPlay = false
-        }
-        
         onDispose { player.removeListener(listener) }
     }
     
@@ -181,14 +175,12 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
-        if (isProcessingPlay) {
-            Log.d("BrowseScreen", "Ignoring play request: Already processing/transitioning")
-            return
-        }
+        // Update the background service's cache with the latest category list
+        // This allows the service to building a Next/Prev playlist internally.
+        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
         
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
-        isProcessingPlay = true
         hasPlaybackError = false
         playbackErrorMessage = null
         val now = System.currentTimeMillis()
@@ -224,54 +216,36 @@ fun BrowseScreen(
         }
 
         try {
-            val selectedIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-
-            // Optimized Windowing Strategy: Send the selected station + 10 nearby stations each way.
-            // A smaller window (21 items total) is significantly faster, prevents Binder IPC
-            // timeouts on slow devices, and still provides a great Next/Prev navigation experience.
-            val windowedStations: List<Station>
-            val startIndexInWindow: Int
-            if (selectedIndex >= 0) {
-                val window = 10 
-                val fromIndex = maxOf(0, selectedIndex - window)
-                val toIndex = minOf(displayStations.size, selectedIndex + window + 1)
-                windowedStations = displayStations.subList(fromIndex, toIndex)
-                startIndexInWindow = selectedIndex - fromIndex
-            } else {
-                // Standalone playback for race conditions
-                windowedStations = listOf(st)
-                startIndexInWindow = 0
-            }
-
-            val mediaItems = windowedStations.map { displaySt ->
-                val artUri = displaySt.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
-                MediaItem.Builder()
-                    .setMediaId(displaySt.stationuuid)
-                    .setUri(displaySt.urlResolved)
-                    .setRequestMetadata(
-                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(android.net.Uri.parse(displaySt.urlResolved))
-                            .build()
-                    )
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(displaySt.name)
-                            .setArtist(displaySt.countryCode ?: "Radio")
-                            .setAlbumTitle(displaySt.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
-                            .setArtworkUri(artUri)
-                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                            .setIsPlayable(true)
-                            .build()
-                    )
-                    .build()
-            }
+            // REVAMP: ATOMIC PLAYBACK
+            // Instead of calculating complex windows in the UI, we send ONE item.
+            // The RadioPlaybackService will expand this into a proper playlist internally.
+            val artUri = st.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(st.stationuuid)
+                .setUri(st.urlResolved)
+                .setRequestMetadata(
+                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
+                        .build()
+                )
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(st.name)
+                        .setArtist(st.countryCode ?: "Radio")
+                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                        .setArtworkUri(artUri)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .setIsPlayable(true)
+                        .build()
+                )
+                .build()
 
             // CRITICAL: CLEAN SLATE ARCHITECTURE
             // We stop and clear everything before setting new items. 
             // This prevents old errors or "stuck" states from bleeding into the new request.
             player.stop()
             player.clearMediaItems()
-            player.setMediaItems(mediaItems, startIndexInWindow, 0L)
+            player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
             

@@ -528,9 +528,6 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             cancelBufferingTimeoutCheck()
             
             // CRITICAL: SUPER HARD RESET
-            // Stop and clear the internal player BEFORE processing the new request.
-            // This ensures that any previous terminal error is cleared and the player
-            // is in a clean slate to accept new media items immediately.
             try {
                 player?.stop()
                 player?.clearMediaItems()
@@ -539,74 +536,73 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             }
             
             try {
-                if (mediaItems.isEmpty()) {
-                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+                val firstItem = mediaItems.firstOrNull()
+                if (firstItem == null) {
+                    MediaSession.MediaItemsWithStartPosition(emptyList(), 0, startPositionMs)
+                } else if (mediaItems.size > 1) {
+                    // === MULTI-ITEM PLAYBACK (Manual/Legacy) ===
+                    // Just passthrough as is, but ensure URIs are set
+                    val resolved = mediaItems.map { item ->
+                        val uri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
+                        if (uri != null && item.localConfiguration == null) {
+                            item.buildUpon().setUri(uri).build()
+                        } else item
+                    }
+                    MediaSession.MediaItemsWithStartPosition(resolved, startIndex, startPositionMs)
                 } else {
-                    // Check if this is a UI-initiated play (has URI) or Auto browser click (no URI)
-                    val firstItem = mediaItems.first()
-                    val passthroughUri = firstItem.requestMetadata.mediaUri ?: firstItem.localConfiguration?.uri
+                    // === ATOMIC SINGLE-ITEM PLAYBACK (The Revamp) ===
+                    // The UI now only sends ONE item. We expand it here internally
+                    // to provide full Next/Prev support without Binder overhead.
+                    val tappedMediaId = firstItem.mediaId
+                    val tappedUri = firstItem.requestMetadata.mediaUri ?: firstItem.localConfiguration?.uri
                     
-                    if (passthroughUri != null) {
-                        // === UI-INITIATED PLAYBACK ===
-                        // UI provided URIs — resolve instantly (no lookup delay)
-                        val resolvedItems = mutableListOf<MediaItem>()
-                        val tappedMediaId = mediaItems.getOrNull(startIndex)?.mediaId
+                    Log.d(TAG, "Atomic play request for: $tappedMediaId")
 
-                        for (item in mediaItems) {
-                            val itemUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
-                            if (itemUri != null) {
-                                // Instant resolution for items WITH URIs
-                                if (item.localConfiguration == null) {
-                                    resolvedItems.add(item.buildUpon().setUri(itemUri).build())
-                                } else {
-                                    resolvedItems.add(item)
-                                }
-                            } else if (item.mediaId == tappedMediaId) {
-                                // ONLY perform a lookup for the SPECIFIC item the user tapped
-                                // to ensure the selected station starts even if it was missing a URI.
-                                // We skip lookups for all other items in the window to stay fast.
-                                val resolved = resolveFromCache(item.mediaId)
-                                if (resolved != null) resolvedItems.add(resolved)
-                            }
-                        }
+                    // 1. Try to build a full playlist from the Active Cache (UI sync)
+                    var targetPlaylist: List<MediaItem> = emptyList()
+                    var targetIndex = 0
+                    
+                    val cachedStations = ActivePlaylistCache.currentBrowseItems
+                    val foundIndex = cachedStations.indexOfFirst { it.stationuuid == tappedMediaId }
+                    
+                    if (foundIndex >= 0) {
+                        Log.d(TAG, "Expanding playlist from ActivePlaylistCache (size ${cachedStations.size})")
+                        // Use a healthy window of 51 items total inside the service
+                        // This is lightning fast as it's already in memory.
+                        val window = 25
+                        val from = maxOf(0, foundIndex - window)
+                        val to = minOf(cachedStations.size, foundIndex + window + 1)
+                        val slice = cachedStations.subList(from, to)
                         
-                        if (resolvedItems.isEmpty()) {
-                            Log.w(TAG, "No valid media items after passthrough resolution")
-                            showPlaybackError("No valid stations", "All selected stations missing URIs")
-                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
-                        } else {
-                            val targetItem = mediaItems.getOrNull(startIndex)
-                            val newIndex = if (targetItem != null) {
-                                val found = resolvedItems.indexOfFirst { it.mediaId == targetItem.mediaId }
-                                if (found >= 0) found else 0
-                            } else 0
-                            
-                            Log.d(TAG, "Resolved ${resolvedItems.size} items via UI Passthrough. startIndex=$newIndex")
-                            MediaSession.MediaItemsWithStartPosition(resolvedItems, newIndex, startPositionMs)
-                        }
+                        targetPlaylist = slice.map(::playableItem)
+                        targetIndex = foundIndex - from
                     } else {
-                        // === ANDROID AUTO BROWSER CLICK ===
-                        // Auto sends just 1 item with mediaId, no URI.
-                        // Build the FULL category playlist so Next/Prev steering wheel controls work.
-                        val tappedMediaId = firstItem.mediaId
-                        Log.d(TAG, "Android Auto single-item play: $tappedMediaId — expanding to full playlist")
-                        
-                        // Find which category this station belongs to and build playlist
-                        val (playlist, tappedIndex) = buildAutoPlaylist(tappedMediaId)
-                        
-                        if (playlist.isEmpty()) {
-                            Log.w(TAG, "Could not build Auto playlist for: $tappedMediaId")
-                            // Fallback: try to resolve just the single item
-                            val single = resolveFromCache(tappedMediaId)
-                            if (single != null) {
-                                MediaSession.MediaItemsWithStartPosition(listOf(single), 0, startPositionMs)
-                            } else {
-                                showPlaybackError("Station not found", "Could not resolve: $tappedMediaId")
-                                MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
-                            }
+                        // 2. Fallback to Auto expansion (Favorites, Categories, etc.)
+                        val (autoList, autoIndex) = buildAutoPlaylist(tappedMediaId)
+                        if (autoList.isNotEmpty()) {
+                            targetPlaylist = autoList
+                            targetIndex = autoIndex
+                        }
+                    }
+
+                    if (targetPlaylist.isNotEmpty()) {
+                        Log.i(TAG, "Playing expanded playlist: ${targetPlaylist.size} items, index=$targetIndex")
+                        MediaSession.MediaItemsWithStartPosition(targetPlaylist, targetIndex, startPositionMs)
+                    } else {
+                        // 3. Absolute fallback: Just play the single item
+                        Log.i(TAG, "Could not expand playlist — playing as standalone item")
+                        val single = if (tappedUri != null) {
+                            if (firstItem.localConfiguration == null) firstItem.buildUpon().setUri(tappedUri).build()
+                            else firstItem
                         } else {
-                            Log.i(TAG, "Auto playlist: ${playlist.size} items, startIndex=$tappedIndex")
-                            MediaSession.MediaItemsWithStartPosition(playlist, tappedIndex, startPositionMs)
+                            resolveFromCache(tappedMediaId)
+                        }
+                        
+                        if (single != null) {
+                            MediaSession.MediaItemsWithStartPosition(listOf(single), 0, startPositionMs)
+                        } else {
+                            showPlaybackError("Station not found", "Could not resolve: $tappedMediaId")
+                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
                         }
                     }
                 }
