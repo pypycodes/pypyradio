@@ -567,9 +567,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     
                     if (foundIndex >= 0) {
                         Log.d(TAG, "Expanding playlist from ActivePlaylistCache (size ${cachedStations.size})")
-                        // Use a healthy window of 51 items total inside the service
-                        // This is lightning fast as it's already in memory.
-                        val window = 25
+                        // Use a massive window of 301 items total inside the service.
+                        // Since the service is now in the same process, we don't have to worry
+                        // about the 1MB Binder limit breaking the initial play request.
+                        // This behaves exactly like Spotify (continuous scrolling).
+                        val window = 150
                         val from = maxOf(0, foundIndex - window)
                         val to = minOf(cachedStations.size, foundIndex + window + 1)
                         val slice = cachedStations.subList(from, to)
