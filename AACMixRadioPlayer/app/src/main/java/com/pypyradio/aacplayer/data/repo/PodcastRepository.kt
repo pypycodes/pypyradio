@@ -276,6 +276,13 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
         favoritePodcastDao?.delete(podcastId)
     }
     
+    /**
+     * Update favorite order
+     */
+    suspend fun updateFavoriteOrder(podcastId: String, orderIndex: Int) {
+        favoritePodcastDao?.updateOrder(podcastId, orderIndex)
+    }
+    
     // Extension functions for conversion
     private fun Podcast.toEntity() = FavoritePodcastEntity(
         id = id,
@@ -286,7 +293,8 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
         feedUrl = feedUrl,
         genre = genre,
         episodeCount = episodeCount,
-        source = source.name
+        source = source.name,
+        orderIndex = System.currentTimeMillis().toInt() // Default to bottom
     )
     
     private fun FavoritePodcastEntity.toPodcast() = Podcast(

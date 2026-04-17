@@ -360,10 +360,15 @@ class StationRepository(private val favoritesDao: FavoriteStationDao) {
                     favicon = station.favicon,
                     countryCode = station.countryCode,
                     codec = station.codec,
-                    bitrate = station.bitrate
+                    bitrate = station.bitrate,
+                    orderIndex = System.currentTimeMillis().toInt() // Default to bottom
                 )
             )
         }
+    }
+    
+    suspend fun updateFavoriteOrder(stationuuid: String, orderIndex: Int) {
+        favoritesDao.updateOrder(stationuuid, orderIndex)
     }
 
     suspend fun pingClick(stationuuid: String) {

@@ -18,13 +18,17 @@ data class FavoritePodcastEntity(
     val feedUrl: String?,
     val genre: String?,
     val episodeCount: Int?,
-    val source: String
+    val source: String,
+    val orderIndex: Int = 0
 )
 
 @Dao
 interface FavoritePodcastDao {
-    @Query("SELECT * FROM favorite_podcasts ORDER BY title ASC")
+    @Query("SELECT * FROM favorite_podcasts ORDER BY orderIndex ASC, title ASC")
     fun observeAll(): Flow<List<FavoritePodcastEntity>>
+    
+    @Query("UPDATE favorite_podcasts SET orderIndex = :newIndex WHERE id = :id")
+    suspend fun updateOrder(id: String, newIndex: Int)
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorite_podcasts WHERE id = :id)")
     suspend fun isFavorite(id: String): Boolean

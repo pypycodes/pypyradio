@@ -408,7 +408,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             if (cachedStations.isEmpty()) loadStationsInternal()
                             cachedStations.take(50)
                         }
-                        topStations.map(::playableItem)
+                        topStations.mapNotNull(::playableItem)
                     }
                     MEDIA_ID_FAVORITES -> {
                         listOf(
@@ -417,7 +417,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         )
                     }
                     MEDIA_ID_FAVORITE_STATIONS -> {
-                        loadFavoritesInternal().map(::playableItem)
+                        loadFavoritesInternal().mapNotNull(::playableItem)
                     }
                     MEDIA_ID_FAVORITE_PODCASTS -> {
                         val favoritePodcasts = try {
@@ -437,7 +437,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             Log.e(TAG, "Failed to load English stations", e)
                             emptyList()
                         }
-                        englishStations.map(::playableItem)
+                        englishStations.mapNotNull(::playableItem)
                     }
                     MEDIA_ID_HINDI -> {
                         val indianStations = try {
@@ -446,7 +446,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                             Log.e(TAG, "Failed to load Indian stations", e)
                             emptyList()
                         }
-                        indianStations.map(::playableItem)
+                        indianStations.mapNotNull(::playableItem)
                     }
                     MEDIA_ID_PODCASTS -> {
                         if (cachedPodcasts.isEmpty()) {
@@ -589,8 +589,8 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         val to = minOf(cachedStations.size, foundIndex + window + 1)
                         val slice = cachedStations.subList(from, to)
                         
-                        targetPlaylist = slice.map(::playableItem)
-                        targetIndex = foundIndex - from
+                        targetPlaylist = slice.mapNotNull(::playableItem)
+                        targetIndex = targetPlaylist.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                     } else {
                         // 2. Fallback to Auto expansion (Favorites, Categories, etc.)
                         val (autoList, autoIndex) = buildAutoPlaylist(tappedMediaId)
@@ -684,7 +684,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         private suspend fun buildAutoPlaylist(tappedMediaId: String): Pair<List<MediaItem>, Int> {
             // 1. Check favorites first (most common use case)
             if (cachedFavorites.any { it.stationuuid == tappedMediaId }) {
-                val items = cachedFavorites.filter { isValidStation(it) }.map(::playableItem)
+                val items = cachedFavorites.filter { isValidStation(it) }.mapNotNull(::playableItem)
                 val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                 Log.d(TAG, "Auto playlist from Favorites: ${items.size} items")
                 return items to index
@@ -693,7 +693,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             // 2. Check ActivePlaylistCache (what the user is currently browsing on the phone)
             // This is the most accurate context for search results and specific categories.
             if (ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == tappedMediaId }) {
-                val items = ActivePlaylistCache.currentBrowseItems.filter { isValidStation(it) }.map(::playableItem)
+                val items = ActivePlaylistCache.currentBrowseItems.filter { isValidStation(it) }.mapNotNull(::playableItem)
                 val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                 Log.d(TAG, "Auto playlist from Active Browse Cache: ${items.size} items")
                 return items to index
@@ -701,7 +701,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             
             // 3. Check cachedStations (top stations, loaded at startup)
             if (cachedStations.any { it.stationuuid == tappedMediaId }) {
-                val items = cachedStations.filter { isValidStation(it) }.map(::playableItem)
+                val items = cachedStations.filter { isValidStation(it) }.mapNotNull(::playableItem)
                 val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                 Log.d(TAG, "Auto playlist from Top Stations: ${items.size} items")
                 return items to index
@@ -712,7 +712,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             try {
                 val english = stationRepo.getEnglishStations(50)
                 if (english.any { it.stationuuid == tappedMediaId }) {
-                    val items = english.filter { isValidStation(it) }.map(::playableItem)
+                    val items = english.filter { isValidStation(it) }.mapNotNull(::playableItem)
                     val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                     Log.d(TAG, "Auto playlist from English: ${items.size} items")
                     return items to index
@@ -725,7 +725,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             try {
                 val indian = stationRepo.getIndianStations(50)
                 if (indian.any { it.stationuuid == tappedMediaId }) {
-                    val items = indian.filter { isValidStation(it) }.map(::playableItem)
+                    val items = indian.filter { isValidStation(it) }.mapNotNull(::playableItem)
                     val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
                     Log.d(TAG, "Auto playlist from Indian: ${items.size} items")
                     return items to index
@@ -764,21 +764,29 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 .build()
         }
 
-        private fun playableItem(station: Station): MediaItem {
-            return MediaItem.Builder()
-                .setMediaId(station.stationuuid)
-                .setUri(station.urlResolved)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(station.name)
-                        .setArtist(station.countryCode ?: "Unknown")
-                        .setGenre(station.tags ?: "Radio")
-                        .setAlbumTitle(station.language?.let { "$it Radio" } ?: "Radio")
-                        .setIsBrowsable(false)
-                        .setIsPlayable(true)
-                        .build()
-                )
-                .build()
+        private fun playableItem(station: Station): MediaItem? {
+            return try {
+                // Ensure we have a valid playable URL string to avoid MediaItem.Builder crashes
+                val uriStr = station.urlResolved.takeIf { it.isNotBlank() } ?: ""
+                
+                MediaItem.Builder()
+                    .setMediaId(station.stationuuid)
+                    .setUri(uriStr)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(station.name)
+                            .setArtist(station.countryCode ?: "Unknown")
+                            .setGenre(station.tags ?: "Radio")
+                            .setAlbumTitle(station.language?.let { "$it Radio" } ?: "Radio")
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            } catch (e: Exception) {
+                Log.w(TAG, "Skipping station ${station.stationuuid} due to unparseable URL", e)
+                null
+            }
         }
 
         

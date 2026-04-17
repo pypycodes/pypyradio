@@ -8,8 +8,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteStationDao {
-    @Query("SELECT * FROM favorite_stations ORDER BY name ASC")
+    @Query("SELECT * FROM favorite_stations ORDER BY orderIndex ASC, name ASC")
     fun observeAll(): Flow<List<FavoriteStationEntity>>
+    
+    @Query("UPDATE favorite_stations SET orderIndex = :newIndex WHERE stationuuid = :id")
+    suspend fun updateOrder(id: String, newIndex: Int)
 
     @Query("SELECT EXISTS(SELECT 1 FROM favorite_stations WHERE stationuuid = :id)")
     suspend fun isFavorite(id: String): Boolean
