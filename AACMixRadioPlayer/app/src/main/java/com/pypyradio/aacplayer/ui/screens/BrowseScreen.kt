@@ -468,8 +468,9 @@ fun BrowseScreen(
                     }
                 }
                 else -> {
+                    val visibleStations = displayStations.take(state.visibleLimit)
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(displayStations, key = { it.stationuuid }) { st ->
+                        items(visibleStations, key = { it.stationuuid }) { st ->
                             val isFailed = state.failedStationIds.contains(st.stationuuid)
                             val isFavorite = favoriteIds.contains(st.stationuuid)
                             val isCurrentStation = currentPlayingId == st.stationuuid
@@ -492,6 +493,27 @@ fun BrowseScreen(
                                 onRetry = { playStation(st) },
                                 onFavorite = { vm.toggleFavorite(st) }
                             )
+                        }
+                        
+                        // Infinite scroll trigger
+                        if (state.visibleLimit < displayStations.size) {
+                            item {
+                                LaunchedEffect(state.visibleLimit) {
+                                    vm.loadMore()
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                     }
                 }

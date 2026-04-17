@@ -29,7 +29,8 @@ data class UiState(
     val failedStationIds: Set<String> = emptySet(),
     val workingStationIds: Set<String> = emptySet(),
     val playbackError: String? = null,
-    val filter: StationFilter = StationFilter.ALL
+    val filter: StationFilter = StationFilter.ALL,
+    val visibleLimit: Int = 15 // Client-side pagination (infinite scrolling)
 )
 
 class StationsViewModel(app: Application) : AndroidViewModel(app) {
@@ -65,7 +66,7 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
 
     // Helper to update stations and trigger background health check
     private fun updateStations(stations: List<Station>) {
-        _browse.value = _browse.value.copy(loading = false, stations = stations, error = null)
+        _browse.value = _browse.value.copy(loading = false, stations = stations, error = null, visibleLimit = 15)
     }
 
     fun loadTop() = viewModelScope.launch {
@@ -142,6 +143,14 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { repo.searchByCountryCode(countryCode, 300) }
             .onSuccess { updateStations(it) }
             .onFailure { _browse.value = _browse.value.copy(loading = false, stations = emptyList(), error = it.message ?: "Failed") }
+    }
+    
+    // Pagination: Increase visible limit
+    fun loadMore() {
+        val current = _browse.value
+        if (current.visibleLimit < current.stations.size) {
+            _browse.value = current.copy(visibleLimit = current.visibleLimit + 15)
+        }
     }
 
     fun toggleFavorite(station: Station) = viewModelScope.launch {

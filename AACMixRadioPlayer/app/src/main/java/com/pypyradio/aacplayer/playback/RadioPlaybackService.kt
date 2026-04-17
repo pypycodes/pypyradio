@@ -320,6 +320,20 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
+    
+    override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.i(TAG, "Task removed (App swiped away). Stopping playback.")
+        
+        // Stop the player so it doesn't continue playing as a zombie process
+        player?.let { p ->
+            p.stop()
+            p.clearMediaItems()
+        }
+        
+        // Tell Android to destroy the service
+        stopSelf()
+    }
 
     override fun onDestroy() {
         Log.i(TAG, "===== SERVICE DESTROYED =====")
