@@ -240,11 +240,9 @@ fun BrowseScreen(
                 )
                 .build()
 
-            // CRITICAL: CLEAN SLATE ARCHITECTURE
-            // We stop and clear everything before setting new items. 
-            // This prevents old errors or "stuck" states from bleeding into the new request.
-            player.stop()
-            player.clearMediaItems()
+            // We removed the explicit player.stop() and clearMediaItems(). 
+            // ExoPlayer's setMediaItem() replaces the entire timeline automatically.
+            // Explicitly pausing/stopping it synchronously here breaks the async MediaSession loader.
             player.setMediaItem(mediaItem)
             player.prepare()
             player.play()
