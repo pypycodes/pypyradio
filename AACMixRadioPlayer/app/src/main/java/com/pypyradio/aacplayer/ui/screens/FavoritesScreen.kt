@@ -3,6 +3,7 @@ package com.pypyradio.aacplayer.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -265,7 +266,7 @@ fun FavoritesScreen(
                         }
                     } else {
                         LazyColumn(Modifier.fillMaxSize()) {
-                            items(validRadioFavs, key = { it.stationuuid }) { st ->
+                            itemsIndexed(validRadioFavs, key = { _, it -> it.stationuuid }) { index, st ->
                                 val isFailed = failedStationIds.contains(st.stationuuid)
                                 val isCurrentStation = currentPlayingId == st.stationuuid
                                 val isCurrentPlaying = isCurrentStation && isPlaying
@@ -275,8 +276,12 @@ fun FavoritesScreen(
                                     isFailed = isFailed,
                                     isPlaying = isCurrentPlaying,
                                     isBuffering = isCurrentBuffering,
+                                    isFirst = index == 0,
+                                    isLast = index == validRadioFavs.lastIndex,
                                     onRowClick = { playStation(st) },
-                                    onRemove = { vm.toggleFavorite(st) }
+                                    onRemove = { vm.toggleFavorite(st) },
+                                    onMoveUp = { vm.moveFavorite(st.stationuuid, -1) },
+                                    onMoveDown = { vm.moveFavorite(st.stationuuid, 1) }
                                 )
                             }
                         }
@@ -335,10 +340,14 @@ fun FavoritesScreen(
                         }
                         else -> {
                             LazyColumn(Modifier.fillMaxSize()) {
-                                items(podcastFavs, key = { it.id }) { podcast ->
+                                itemsIndexed(podcastFavs, key = { _, it -> it.id }) { index, podcast ->
                                     FavPodcastRow(
                                         podcast = podcast,
+                                        isFirst = index == 0,
+                                        isLast = index == podcastFavs.lastIndex,
                                         onRemove = { podcastVm.toggleFavorite(podcast) },
+                                        onMoveUp = { podcastVm.moveFavorite(podcast.id, -1) },
+                                        onMoveDown = { podcastVm.moveFavorite(podcast.id, 1) },
                                         onClick = { podcastVm.loadFavoriteEpisodes(podcast) }
                                     )
                                 }
@@ -357,8 +366,12 @@ private fun FavStationRow(
     isFailed: Boolean = false,
     isPlaying: Boolean, 
     isBuffering: Boolean = false,
+    isFirst: Boolean,
+    isLast: Boolean,
     onRowClick: () -> Unit, 
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
 ) {
     val isActive = isPlaying || isBuffering
     
@@ -457,6 +470,23 @@ private fun FavStationRow(
                     }
                 }
             }
+            Column {
+                if (!isFirst) {
+                    IconButton(onClick = onMoveUp, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Spacer(modifier = Modifier.size(24.dp))
+                }
+                if (!isLast) {
+                    IconButton(onClick = onMoveDown, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Spacer(modifier = Modifier.size(24.dp))
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             FilledTonalIconButton(
                 onClick = onRemove,
                 modifier = Modifier.size(36.dp)
@@ -495,7 +525,11 @@ private fun FavStationRow(
 @Composable
 private fun FavPodcastRow(
     podcast: Podcast,
+    isFirst: Boolean,
+    isLast: Boolean,
     onRemove: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onClick: () -> Unit
 ) {
     Card(
@@ -537,6 +571,23 @@ private fun FavPodcastRow(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
+            Column {
+                if (!isFirst) {
+                    IconButton(onClick = onMoveUp, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Spacer(modifier = Modifier.size(24.dp))
+                }
+                if (!isLast) {
+                    IconButton(onClick = onMoveDown, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Spacer(modifier = Modifier.size(24.dp))
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             FilledTonalIconButton(
                 onClick = onRemove,
                 modifier = Modifier.size(36.dp),

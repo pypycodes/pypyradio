@@ -15,5 +15,6 @@ data class FavoriteStationEntity(
     val favicon: String?,
     val countryCode: String?,
     val codec: String?,
-    val bitrate: Int?
+    val bitrate: Int?,
+    val orderIndex: Int = 0
 )
