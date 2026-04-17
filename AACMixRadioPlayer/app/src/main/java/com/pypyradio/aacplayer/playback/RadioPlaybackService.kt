@@ -790,6 +790,17 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             handlePlaybackError(error)
         }
         
+        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            val p = player ?: return
+            // RACE CONDITION FIX: If the UI commanded 'play()' (playWhenReady=true) but the 
+            // playlist items arrived asynchronously *afterwards*, the player will be stuck in STATE_IDLE.
+            // When the timeline finally arrives, we must manually wake the player up via prepare().
+            if (p.playbackState == Player.STATE_IDLE && p.playWhenReady && !timeline.isEmpty) {
+                Log.i(TAG, "Timeline populated asynchronously. Waking up player and forcing prepare().")
+                p.prepare()
+            }
+        }
+        
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_IDLE -> {
