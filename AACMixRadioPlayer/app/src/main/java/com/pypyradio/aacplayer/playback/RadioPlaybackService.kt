@@ -817,6 +817,35 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     }
                 }
             }
+            
+            // DYNAMIC TIMELINE SHIFTING
+            // Allows the user to continuously hit Next or Prev sequentially, automatically
+            // fetching the "new N+1" gracefully into ExoPlayer without violating Binder size limits.
+            val currentId = mediaItem?.mediaId ?: return
+            val cachedStations = ActivePlaylistCache.currentBrowseItems
+            if (cachedStations.isNotEmpty()) {
+                val foundIndex = cachedStations.indexOfFirst { it.stationuuid == currentId }
+                player?.let { p ->
+                    if (foundIndex >= 0) {
+                        // Dynamically append N+1 if we reached the right edge of our micro-window
+                        if (p.currentMediaItemIndex >= p.mediaItemCount - 1 && foundIndex + 1 < cachedStations.size) {
+                            val nextStation = cachedStations[foundIndex + 1]
+                            playableItem(nextStation)?.let {
+                                Log.i(TAG, "Dynamic Expand: Appending Next station ${it.mediaId} to timeline edge")
+                                p.addMediaItem(it)
+                            }
+                        }
+                        // Dynamically prepend N-1 if we reached the left edge of our micro-window
+                        if (p.currentMediaItemIndex == 0 && foundIndex - 1 >= 0) {
+                            val prevStation = cachedStations[foundIndex - 1]
+                            playableItem(prevStation)?.let {
+                                Log.i(TAG, "Dynamic Expand: Prepending Prev station ${it.mediaId} to timeline edge")
+                                p.addMediaItem(0, it)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
