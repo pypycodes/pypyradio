@@ -145,8 +145,10 @@ fun FavoritesScreen(
             val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
                 .coerceAtLeast(0)
             
-            player.setMediaItems(mediaItems, startIndex, 0L)
-            player.prepare()
+            player.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
+            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                player.prepare()
+            }
             player.play()
             currentPlayingId = st.stationuuid
         } catch (e: Exception) {
