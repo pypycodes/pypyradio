@@ -175,7 +175,9 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
-        
+        // Sync full category list so background service can dynamically append next streams silently
+        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = displayStations
+
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
         hasPlaybackError = false
@@ -214,11 +216,10 @@ fun BrowseScreen(
 
         try {
             // MICRO-WINDOW PLAYBACK: 
-            // We use an ultra small window (2 before, current, 2 after) 
-            // to allow basic ability to skip a broken station via Next/Prev 
-            // continuously while staying vastly under Android UI IPC memory limits.
+            // We use exactly 3 elements (N-1, N, N+1) per user request to initialize standard basic Next/Prev availability.
+            // The background PlayerErrorListener dynamic timeline expansion will natively append continuously as you skip!
             val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            val window = 2 // Exact offset size for mini Next/Prev behavior
+            val window = 1 // Exact offset size for mini Next/Prev behavior
             val from = maxOf(0, foundIndex - window)
             val to = minOf(displayStations.size, foundIndex + window + 1)
             
