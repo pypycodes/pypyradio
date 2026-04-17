@@ -89,6 +89,7 @@ fun BrowseScreen(
     var isSlowConnection by remember { mutableStateOf(false) }
     var hasPlaybackError by remember { mutableStateOf(false) }
     var playbackErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isProcessingPlay by remember { mutableStateOf(false) }
     
     // Selected category
     var selectedCategory by remember { mutableStateOf("popular") }
@@ -155,6 +156,12 @@ fun BrowseScreen(
         isPlaying = player.isPlaying
         isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         hasPlaybackError = player.playerError != null
+        
+        // Reset interaction lock when player state changes or transitions
+        if (player.playbackState != Player.STATE_IDLE) {
+            isProcessingPlay = false
+        }
+        
         onDispose { player.removeListener(listener) }
     }
     
@@ -173,8 +180,14 @@ fun BrowseScreen(
     // build MediaItems locally, send via setMediaItems(list, startIndex).
     // Window of 25 items stays safely within the Binder IPC size limit.
     fun playStation(st: Station) {
+        if (isProcessingPlay) {
+            Log.d("BrowseScreen", "Ignoring play request: Already processing/transitioning")
+            return
+        }
+        
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
+        isProcessingPlay = true
         hasPlaybackError = false
         playbackErrorMessage = null
         val now = System.currentTimeMillis()

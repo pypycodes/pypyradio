@@ -522,10 +522,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = serviceScope.future {
             Log.d(TAG, "onSetMediaItems: ${mediaItems.size} items, startIndex=$startIndex")
             
-            // New: Immediately cancel any background skip/timeout logic 
+            // CRITICAL: Immediately cancel any background skip/timeout logic 
             // the moment a manual UI request arrives.
             isAutoSkipping = false
             cancelBufferingTimeoutCheck()
+            
+            // CRITICAL: SUPER HARD RESET
+            // Stop and clear the internal player BEFORE processing the new request.
+            // This ensures that any previous terminal error is cleared and the player
+            // is in a clean slate to accept new media items immediately.
+            try {
+                player?.stop()
+                player?.clearMediaItems()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to perform internal player reset", e)
+            }
             
             try {
                 if (mediaItems.isEmpty()) {
@@ -539,19 +550,24 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         // === UI-INITIATED PLAYBACK ===
                         // UI provided URIs — resolve instantly (no lookup delay)
                         val resolvedItems = mutableListOf<MediaItem>()
+                        val tappedMediaId = mediaItems.getOrNull(startIndex)?.mediaId
+
                         for (item in mediaItems) {
                             val itemUri = item.requestMetadata.mediaUri ?: item.localConfiguration?.uri
-                            val resolved = if (itemUri != null) {
+                            if (itemUri != null) {
+                                // Instant resolution for items WITH URIs
                                 if (item.localConfiguration == null) {
-                                    item.buildUpon().setUri(itemUri).build()
+                                    resolvedItems.add(item.buildUpon().setUri(itemUri).build())
                                 } else {
-                                    item
+                                    resolvedItems.add(item)
                                 }
-                            } else {
-                                // Fallback: resolve from cache (suspend call)
-                                resolveFromCache(item.mediaId)
+                            } else if (item.mediaId == tappedMediaId) {
+                                // ONLY perform a lookup for the SPECIFIC item the user tapped
+                                // to ensure the selected station starts even if it was missing a URI.
+                                // We skip lookups for all other items in the window to stay fast.
+                                val resolved = resolveFromCache(item.mediaId)
+                                if (resolved != null) resolvedItems.add(resolved)
                             }
-                            if (resolved != null) resolvedItems.add(resolved)
                         }
                         
                         if (resolvedItems.isEmpty()) {
