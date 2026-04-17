@@ -216,11 +216,26 @@ fun BrowseScreen(
         }
 
         try {
-            // FRESH APPROACH:
-            // Delegate all responsibility to the Service. The UI only sends the tapped ID.
-            // This prevents race conditions with Binder IPC and MediaItem desynchronization.
+            val cleanFavicon = st.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+            val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
             val mediaItem = MediaItem.Builder()
                 .setMediaId(st.stationuuid)
+                .setUri(st.urlResolved)
+                .setRequestMetadata(
+                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(android.net.Uri.parse(st.urlResolved))
+                        .build()
+                )
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(st.name.take(100))
+                        .setArtist(st.countryCode ?: "Radio")
+                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
+                        .setArtworkUri(artUri)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .setIsPlayable(true)
+                        .build()
+                )
                 .build()
 
             player.setMediaItem(mediaItem)
