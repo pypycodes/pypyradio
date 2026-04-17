@@ -212,22 +212,19 @@ fun BrowseScreen(
         try {
             val selectedIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
 
-            // Build windowed slice centred on the tapped station.
-            // If selectedIndex == -1 (health check removed station just as user tapped it),
-            // play the station standalone — never default to index 0 which plays the wrong station.
-            // Build larger window slice (100 items each side) for better Next/Prev support.
-            // A window of 200 items stays safely within the 1MB Binder IPC size limit.
+            // Optimized Windowing Strategy: Send the selected station + 10 nearby stations each way.
+            // A smaller window (21 items total) is significantly faster, prevents Binder IPC
+            // timeouts on slow devices, and still provides a great Next/Prev navigation experience.
             val windowedStations: List<Station>
             val startIndexInWindow: Int
             if (selectedIndex >= 0) {
-                val window = 25
+                val window = 10 
                 val fromIndex = maxOf(0, selectedIndex - window)
                 val toIndex = minOf(displayStations.size, selectedIndex + window + 1)
                 windowedStations = displayStations.subList(fromIndex, toIndex)
                 startIndexInWindow = selectedIndex - fromIndex
             } else {
-                // Station was just removed from displayStations (timing race with health check).
-                // Play it as a standalone item so the mini player shows the correct station.
+                // Standalone playback for race conditions
                 windowedStations = listOf(st)
                 startIndexInWindow = 0
             }
@@ -255,14 +252,18 @@ fun BrowseScreen(
                     .build()
             }
 
+            // CRITICAL: CLEAN SLATE ARCHITECTURE
+            // We stop and clear everything before setting new items. 
+            // This prevents old errors or "stuck" states from bleeding into the new request.
             player.stop()
             player.clearMediaItems()
             player.setMediaItems(mediaItems, startIndexInWindow, 0L)
             player.prepare()
             player.play()
-            // Do NOT set currentPlayingId here — let onEvents update it from the actual player state.
-            // Setting it here races with async IPC error events from the PREVIOUS playlist,
-            // causing those stale errors to mark the new station as failed.
+            
+            // Note: We do NOT set currentPlayingId here manually.
+            // We wait for the player to transition so the UI state stays in sync 
+            // with the actual background service.
         } catch (e: Exception) {
             vm.markStationFailed(st.stationuuid, "Playback error")
             scope.launch { snackbarHostState.showSnackbar("Station unavailable", duration = SnackbarDuration.Short) }

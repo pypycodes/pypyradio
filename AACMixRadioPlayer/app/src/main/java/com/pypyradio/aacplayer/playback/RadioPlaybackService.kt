@@ -522,6 +522,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = serviceScope.future {
             Log.d(TAG, "onSetMediaItems: ${mediaItems.size} items, startIndex=$startIndex")
             
+            // New: Immediately cancel any background skip/timeout logic 
+            // the moment a manual UI request arrives.
+            isAutoSkipping = false
+            cancelBufferingTimeoutCheck()
+            
             try {
                 if (mediaItems.isEmpty()) {
                     MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
