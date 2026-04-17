@@ -219,7 +219,8 @@ fun BrowseScreen(
             // REVAMP: ATOMIC PLAYBACK
             // Instead of calculating complex windows in the UI, we send ONE item.
             // The RadioPlaybackService will expand this into a proper playlist internally.
-            val artUri = st.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+            val cleanFavicon = st.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+            val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
             val mediaItem = MediaItem.Builder()
                 .setMediaId(st.stationuuid)
                 .setUri(st.urlResolved)
@@ -230,9 +231,9 @@ fun BrowseScreen(
                 )
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(st.name)
+                        .setTitle(st.name.take(100))
                         .setArtist(st.countryCode ?: "Radio")
-                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim() ?: "Internet Radio")
+                        .setAlbumTitle(st.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
                         .setArtworkUri(artUri)
                         .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                         .setIsPlayable(true)

@@ -85,7 +85,8 @@ fun FavoritesScreen(
     
     // Helper function to create a MediaItem from a Station
     fun createStationMediaItem(station: Station): MediaItem {
-        val artworkUri = station.favicon?.takeIf { it.isNotBlank() }?.let {
+        val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
+        val artworkUri = cleanFavicon?.let {
             android.net.Uri.parse(it)
         }
         return MediaItem.Builder()
