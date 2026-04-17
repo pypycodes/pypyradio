@@ -216,42 +216,17 @@ fun BrowseScreen(
         }
 
         try {
-            val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            val window = 15
-            val from = maxOf(0, foundIndex - window)
-            val to = minOf(displayStations.size, foundIndex + window + 1)
-            
-            val slice = displayStations.subList(from, to)
-            val mediaItems = slice.map { station ->
-                val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
-                val artUri = cleanFavicon?.let { android.net.Uri.parse(it) }
-                MediaItem.Builder()
-                    .setMediaId(station.stationuuid)
-                    .setUri(station.urlResolved)
-                    .setRequestMetadata(
-                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(android.net.Uri.parse(station.urlResolved))
-                            .build()
-                    )
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(station.name.take(100))
-                            .setArtist(station.countryCode ?: "Radio")
-                            .setAlbumTitle(station.tags?.split(",")?.firstOrNull()?.trim()?.take(50) ?: "Internet Radio")
-                            .setArtworkUri(artUri)
-                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                            .setIsPlayable(true)
-                            .build()
-                    )
-                    .build()
-            }
-            
-            val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
+            // FRESH APPROACH:
+            // Delegate all responsibility to the Service. The UI only sends the tapped ID.
+            // This prevents race conditions with Binder IPC and MediaItem desynchronization.
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(st.stationuuid)
+                .build()
 
-            player.stop()
-            player.clearMediaItems()
-            player.setMediaItems(mediaItems, targetIndex, 0L)
-            player.prepare()
+            player.setMediaItem(mediaItem)
+            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                player.prepare()
+            }
             player.play()
             
             // Note: We do NOT set currentPlayingId here manually.

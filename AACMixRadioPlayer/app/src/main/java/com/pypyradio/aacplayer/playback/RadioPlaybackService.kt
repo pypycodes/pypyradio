@@ -600,9 +600,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         }
                     }
 
+                    val safePos = if (startPositionMs <= 0L) androidx.media3.common.C.TIME_UNSET else startPositionMs
                     if (targetPlaylist.isNotEmpty()) {
                         Log.i(TAG, "Playing expanded playlist: ${targetPlaylist.size} items, index=$targetIndex")
-                        MediaSession.MediaItemsWithStartPosition(targetPlaylist, targetIndex, startPositionMs)
+                        MediaSession.MediaItemsWithStartPosition(targetPlaylist, targetIndex, safePos)
                     } else {
                         // 3. Absolute fallback: Just play the single item
                         Log.i(TAG, "Could not expand playlist — playing as standalone item")
@@ -614,10 +615,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         }
                         
                         if (single != null) {
-                            MediaSession.MediaItemsWithStartPosition(listOf(single), 0, startPositionMs)
+                            MediaSession.MediaItemsWithStartPosition(listOf(single), 0, safePos)
                         } else {
                             showPlaybackError("Station not found", "Could not resolve: $tappedMediaId")
-                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, 0)
+                            MediaSession.MediaItemsWithStartPosition(emptyList(), 0, androidx.media3.common.C.TIME_UNSET)
                         }
                     }
                 }
@@ -678,44 +679,54 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         }
         
         /**
+         * Safely map a list of stations to MediaItems using a sliding window around the tapped item.
+         * This prevents Binder IPC crashes (TransactionTooLargeException) when playlists exceed ~100 items.
+         */
+        private fun windowedPlaylist(stations: List<Station>, tappedMediaId: String): Pair<List<MediaItem>, Int>? {
+            val foundIndex = stations.indexOfFirst { it.stationuuid == tappedMediaId }
+            if (foundIndex < 0) return null
+            
+            val window = 15
+            val from = maxOf(0, foundIndex - window)
+            val to = minOf(stations.size, foundIndex + window + 1)
+            val slice = stations.subList(from, to)
+            
+            val items = slice.filter { isValidStation(it) }.mapNotNull(::playableItem)
+            val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
+            return items to index
+        }
+        
+        /**
          * Build a full playlist for Android Auto from the category the tapped station belongs to.
          * Returns (playlistItems, startIndex) where startIndex points to the tapped station.
          */
         private suspend fun buildAutoPlaylist(tappedMediaId: String): Pair<List<MediaItem>, Int> {
             // 1. Check favorites first (most common use case)
-            if (cachedFavorites.any { it.stationuuid == tappedMediaId }) {
-                val items = cachedFavorites.filter { isValidStation(it) }.mapNotNull(::playableItem)
-                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                Log.d(TAG, "Auto playlist from Favorites: ${items.size} items")
-                return items to index
+            windowedPlaylist(cachedFavorites, tappedMediaId)?.let {
+                Log.d(TAG, "Auto playlist from Favorites: ${it.first.size} items")
+                return it
             }
             
             // 2. Check ActivePlaylistCache (what the user is currently browsing on the phone)
             // This is the most accurate context for search results and specific categories.
-            if (ActivePlaylistCache.currentBrowseItems.any { it.stationuuid == tappedMediaId }) {
-                val items = ActivePlaylistCache.currentBrowseItems.filter { isValidStation(it) }.mapNotNull(::playableItem)
-                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                Log.d(TAG, "Auto playlist from Active Browse Cache: ${items.size} items")
-                return items to index
+            windowedPlaylist(ActivePlaylistCache.currentBrowseItems, tappedMediaId)?.let {
+                Log.d(TAG, "Auto playlist from Active Browse Cache: ${it.first.size} items")
+                return it
             }
             
             // 3. Check cachedStations (top stations, loaded at startup)
-            if (cachedStations.any { it.stationuuid == tappedMediaId }) {
-                val items = cachedStations.filter { isValidStation(it) }.mapNotNull(::playableItem)
-                val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                Log.d(TAG, "Auto playlist from Top Stations: ${items.size} items")
-                return items to index
+            windowedPlaylist(cachedStations, tappedMediaId)?.let {
+                Log.d(TAG, "Auto playlist from Top Stations: ${it.first.size} items")
+                return it
             }
             
             // 3. Try loading specific categories to find the station
             // Try English stations
             try {
                 val english = stationRepo.getEnglishStations(50)
-                if (english.any { it.stationuuid == tappedMediaId }) {
-                    val items = english.filter { isValidStation(it) }.mapNotNull(::playableItem)
-                    val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                    Log.d(TAG, "Auto playlist from English: ${items.size} items")
-                    return items to index
+                windowedPlaylist(english, tappedMediaId)?.let {
+                    Log.d(TAG, "Auto playlist from English: ${it.first.size} items")
+                    return it
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to check English stations", e)
@@ -724,11 +735,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             // Try Indian stations
             try {
                 val indian = stationRepo.getIndianStations(50)
-                if (indian.any { it.stationuuid == tappedMediaId }) {
-                    val items = indian.filter { isValidStation(it) }.mapNotNull(::playableItem)
-                    val index = items.indexOfFirst { it.mediaId == tappedMediaId }.coerceAtLeast(0)
-                    Log.d(TAG, "Auto playlist from Indian: ${items.size} items")
-                    return items to index
+                windowedPlaylist(indian, tappedMediaId)?.let {
+                    Log.d(TAG, "Auto playlist from Indian: ${it.first.size} items")
+                    return it
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to check Indian stations", e)
