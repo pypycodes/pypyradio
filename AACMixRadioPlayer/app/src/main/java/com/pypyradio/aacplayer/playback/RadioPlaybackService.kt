@@ -21,6 +21,7 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import android.os.Bundle
+import android.media.audiofx.LoudnessEnhancer
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.google.common.collect.ImmutableList
@@ -125,6 +126,7 @@ class RadioPlaybackService : MediaLibraryService() {
 
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
 
     override fun onCreate() {
         Log.i(TAG, "===== SERVICE CREATED =====")
@@ -326,6 +328,13 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         player?.release()
         wifiLock?.release()
         wakeLock?.release()
+        // Release volume enhancer
+        loudnessEnhancer?.let {
+            it.enabled = false
+            it.release()
+        }
+        loudnessEnhancer = null
+
         super.onDestroy()
     }
 
@@ -815,6 +824,25 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         p.play()
                     }
                 }
+            }
+        }
+
+        override fun onAudioSessionIdChanged(audioSessionId: Int) {
+            super.onAudioSessionIdChanged(audioSessionId)
+            try {
+                // Release old enhancer
+                loudnessEnhancer?.release()
+                
+                // Create new enhancer for the current audio session
+                val enhancer = LoudnessEnhancer(audioSessionId)
+                // Set a safe but useful target gain in millibels (mB)
+                // 150mB is approximately +1.5dB boost
+                enhancer.setTargetGain(150)
+                enhancer.enabled = true
+                loudnessEnhancer = enhancer
+                Log.i(TAG, "Loudness Enhancer enabled (+1.5dB boost) for session $audioSessionId")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to initialize Loudness Enhancer", e)
             }
         }
     }
