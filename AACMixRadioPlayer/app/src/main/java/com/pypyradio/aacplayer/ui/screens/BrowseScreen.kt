@@ -178,9 +178,14 @@ fun BrowseScreen(
         hasPlaybackError = false
         playbackErrorMessage = null
         val now = System.currentTimeMillis()
-        // 300ms debounce: prevent accidental double-tap
-        if (now - lastPlayTime < 300) return
+        // 500ms debounce: prevent accidental double-tap (consistent with Favorites)
+        if (now - lastPlayTime < 500) return
         lastPlayTime = now
+        
+        // Immediate visual feedback
+        isBuffering = false
+        hasPlaybackError = false
+        playbackErrorMessage = null
 
         val url = st.urlResolved
         if (url.isBlank()) {
@@ -189,8 +194,9 @@ fun BrowseScreen(
             return
         }
 
-        // Toggle play/pause if same station
-        if (currentPlayingId == st.stationuuid) {
+        // Toggle play/pause if same station AND player is healthy.
+        // If there's an error, we bypass this to force a full re-set of the media items.
+        if (currentPlayingId == st.stationuuid && !hasPlaybackError && player.playerError == null) {
             if (player.isPlaying) {
                 player.pause()
             } else {

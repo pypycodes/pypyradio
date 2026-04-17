@@ -804,6 +804,18 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             currentStationIndex = player?.currentMediaItemIndex ?: 0
             val mediaId = mediaItem?.mediaId
             Log.d(TAG, "Media item transition: $mediaId (index: $currentStationIndex, reason: $reason)")
+            
+            // If the user manually skips (SEEK), force the player to prepare and play 
+            // the new item immediately. This recovers from error/stopped states.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                player?.let { p ->
+                    if (!p.isPlaying || p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
+                        Log.i(TAG, "Manual skip detected. Forcing playback recovery.")
+                        p.prepare()
+                        p.play()
+                    }
+                }
+            }
         }
     }
     
@@ -846,9 +858,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         val totalItems = currentPlayer.mediaItemCount
         
         if (totalItems <= 1) {
-            Log.w(TAG, "Cannot skip: Only one item in playlist")
-            currentPlayer.prepare()
-            currentPlayer.play()
+            Log.w(TAG, "Cannot skip: Only one item in playlist. Stopping playback.")
+            currentPlayer.stop()
+            currentPlayer.prepare() // Prepare to allow the user to manually retry if they want
             return
         }
 

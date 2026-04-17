@@ -59,11 +59,16 @@ fun FullScreenPlayer(
         album = mediaItem?.mediaMetadata?.albumTitle?.toString() ?: ""
         artworkUri = mediaItem?.mediaMetadata?.artworkUri
         isPlaying = player.isPlaying
-        hasNext = player.hasNextMediaItem()
-        hasPrev = player.hasPreviousMediaItem()
         val wasBuffering = isBuffering
         // Only show buffering UI if we aren't actually playing audio yet
         isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
+        
+        // Robust navigation check: determine next/prev by counts and indices
+        val total = player.mediaItemCount
+        val current = player.currentMediaItemIndex
+        hasNext = total > 1 && current < total - 1
+        hasPrev = total > 1 && current > 0
+        
         // Track buffering start
         if (isBuffering && !wasBuffering) {
             bufferingStartTime = System.currentTimeMillis()

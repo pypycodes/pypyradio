@@ -75,8 +75,14 @@ fun SimpleNowPlayingBar(
                 // Only show buffering UI if we aren't actually playing audio yet
                 isBuffering = p.playbackState == Player.STATE_BUFFERING && !p.isPlaying
                 isStopped = p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED
-                hasNext = p.hasNextMediaItem()
-                hasPrevious = p.hasPreviousMediaItem()
+                
+                // Robust Check: Determine next/prev availability by the actual timeline counts.
+                // hasNextMediaItem() can sometimes be unreliable during certain error states.
+                val total = p.mediaItemCount
+                val current = p.currentMediaItemIndex
+                hasNext = total > 1 && current < total - 1
+                hasPrevious = total > 1 && current > 0
+                
                 // Track buffering start for slow connection message
                 if (isBuffering && !wasBuffering) {
                     bufferingStartTime = System.currentTimeMillis()
@@ -88,6 +94,10 @@ fun SimpleNowPlayingBar(
             
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 errorCount++
+                // Update navigation flags even on error
+                hasNext = player.mediaItemCount > 1 && player.currentMediaItemIndex < player.mediaItemCount - 1
+                hasPrevious = player.mediaItemCount > 1 && player.currentMediaItemIndex > 0
+                
                 // Determine contextual error message
                 val msg = when {
                     error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ->
@@ -129,6 +139,10 @@ fun SimpleNowPlayingBar(
                 errorMessage = null
                 title = mediaItem?.mediaMetadata?.title?.toString() ?: mediaItem?.mediaId
                 mediaId = mediaItem?.mediaId
+                
+                // Refresh navigation flags immediately on transition
+                hasNext = player.mediaItemCount > 1 && player.currentMediaItemIndex < player.mediaItemCount - 1
+                hasPrevious = player.mediaItemCount > 1 && player.currentMediaItemIndex > 0
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -141,6 +155,9 @@ fun SimpleNowPlayingBar(
                     errorCount = 0
                     errorMessage = null
                 }
+                // Refresh navigation flags
+                hasNext = player.mediaItemCount > 1 && player.currentMediaItemIndex < player.mediaItemCount - 1
+                hasPrevious = player.mediaItemCount > 1 && player.currentMediaItemIndex > 0
             }
         }
         player.addListener(listener)
@@ -153,8 +170,8 @@ fun SimpleNowPlayingBar(
         isBuffering = player.playbackState == Player.STATE_BUFFERING && !player.isPlaying
         isStopped = player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
         hasError = player.playerError != null
-        hasNext = player.hasNextMediaItem()
-        hasPrevious = player.hasPreviousMediaItem()
+        hasNext = player.mediaItemCount > 1 && player.currentMediaItemIndex < player.mediaItemCount - 1
+        hasPrevious = player.mediaItemCount > 1 && player.currentMediaItemIndex > 0
         onDispose { player.removeListener(listener) }
     }
 
