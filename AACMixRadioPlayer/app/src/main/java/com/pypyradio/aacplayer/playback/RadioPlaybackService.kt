@@ -798,6 +798,12 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 }
                 Player.STATE_READY -> {
                     Log.d(TAG, "Player state: READY - Playback successful")
+                    
+                    // SAFETY: Re-force volume for emulators on every readiness change
+                    if (Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")) {
+                        player?.volume = 1.0f
+                    }
+                    
                     // Reset failed stations on successful playback
                     val currentMediaId = player?.currentMediaItem?.mediaId
                     if (currentMediaId != null) {

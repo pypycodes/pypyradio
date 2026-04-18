@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -98,8 +99,17 @@ fun TvAppRoot(
         vm.loadTop()
     }
     
+    val TvPremiumPalette = darkColorScheme(
+        primary = Color(0xFF42A5F5), // Vibrant Blue Focus
+        surface = Color(0xFF121212), // Deep Ebony background
+        onSurface = Color.White,     // High contrast text
+        onSurfaceVariant = Color(0xFFCFD8DC), // Light gray subtitles
+        secondaryContainer = Color(0xFF263238), // Focused item background
+        primaryContainer = Color(0xFF1976D2)
+    )
+
     MaterialTheme(
-        colorScheme = darkColorScheme()
+        colorScheme = TvPremiumPalette
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
