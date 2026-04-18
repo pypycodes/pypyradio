@@ -59,28 +59,6 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Header
-            Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                contentDescription = "pypyradio",
-                modifier = Modifier.size(100.dp)
-            )
-            
-            Text(
-                "pypyradio",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            
-            Text(
-                "Version ${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Spacer(Modifier.height(32.dp))
-            
             // Playback Settings Section
             Text(
                 "Playback Settings",
@@ -88,20 +66,21 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.Start)
             )
-            Spacer(Modifier.height(16.dp))
-            
+            Spacer(Modifier.height(24.dp))
+
             val prefs = AppPreferences.get(LocalContext.current)
             val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
             val currentSoundMode by prefs.soundMode.collectAsState()
 
-            // Sound Modes Section
+            // Subheading: Sound Modes
             Text(
                 "Sound Modes",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.Start)
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -175,6 +154,16 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
             Spacer(Modifier.height(24.dp))
             
+            // Subheading: Auto-Skip
+            Text(
+                "Auto-Skip",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(8.dp))
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -186,8 +175,8 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                         Text(
-                            "Smart Auto-Skip",
-                            style = MaterialTheme.typography.titleMedium,
+                            "Enabled",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(4.dp))
@@ -207,6 +196,14 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(32.dp))
             
             // About App Section
+            Text(
+                "About This App",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(16.dp))
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -214,13 +211,32 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 )
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "About This App",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                "pypyradio",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Version ${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
                     Text(
                         "pypyradio is a free, open-source radio player designed for simplicity. " +
                         "It provides access to thousands of internet radio stations and podcasts. " +
