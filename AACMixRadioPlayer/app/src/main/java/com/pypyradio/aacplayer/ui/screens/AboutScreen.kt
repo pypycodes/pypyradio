@@ -16,6 +16,10 @@ import androidx.compose.material3.*
 import androidx.compose.ui.res.painterResource
 import com.pypyradio.aacplayer.R
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Modifier
@@ -132,6 +136,48 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 title = "Android Auto",
                 description = "Connects the app's media session to your car's display so you can safely browse and play favorite stations while driving."
             )
+            
+            Spacer(Modifier.height(32.dp))
+            
+            // Settings Section
+            Text(
+                "Playback Settings",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(16.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(
+                            "Smart Auto-Skip",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Automatically skips to the next station instead of stopping if a stream stays buffering for over 35 seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val prefs = AppPreferences.get(LocalContext.current)
+                    val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
+                    Switch(
+                        checked = autoSkipEnabled,
+                        onCheckedChange = { prefs.setAutoSkipEnabled(it) }
+                    )
+                }
+            }
             
             Spacer(Modifier.height(32.dp))
             

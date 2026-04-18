@@ -27,8 +27,8 @@ android {
         applicationId = "com.pypyradio.aacplayer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 130
-        versionName = "2.3.17"
+        versionCode = 131
+        versionName = "2.3.18"
     }
 
     signingConfigs {
@@ -138,6 +138,9 @@ dependencies {
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
+
+    // Reorderable list (Drag and Drop)
+    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
 
     // Room
     val roomVersion = "2.6.1"
