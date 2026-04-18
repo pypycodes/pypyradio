@@ -32,7 +32,7 @@ import com.pypyradio.aacplayer.ui.components.SleepTimerButton
 import com.pypyradio.aacplayer.ui.components.SleepTimerDialog
 import com.pypyradio.aacplayer.ui.components.FullScreenPlayer
 import com.pypyradio.aacplayer.ui.components.rememberSleepTimerState
-import com.pypyradio.aacplayer.ui.screens.AboutScreen
+import com.pypyradio.aacplayer.ui.screens.SettingsScreen
 import com.pypyradio.aacplayer.ui.screens.BrowseScreen
 import com.pypyradio.aacplayer.ui.screens.FavoritesScreen
 import com.pypyradio.aacplayer.ui.screens.PodcastScreen
@@ -54,7 +54,7 @@ private enum class MainNavTab(
 @Composable
 fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = viewModel()) {
     var selectedTab by remember { mutableStateOf(MainNavTab.RADIO) }
-    var showAbout by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     
@@ -115,7 +115,7 @@ fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = v
     // Handle back button
     BackHandler(enabled = true) {
         when {
-            showAbout -> showAbout = false
+            showSettings -> showSettings = false
             selectedTab != MainNavTab.RADIO -> selectedTab = MainNavTab.RADIO
             else -> showExitDialog = true
         }
@@ -160,9 +160,9 @@ fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = v
         
         val player = controller
         
-        // Show About screen if requested
-        if (showAbout && player != null) {
-            AboutScreen(onBack = { showAbout = false })
+        // Show Settings screen if requested
+        if (showSettings && player != null) {
+            SettingsScreen(onBack = { showSettings = false })
             return@MaterialTheme
         }
         
@@ -228,7 +228,7 @@ fun AppRoot(vm: StationsViewModel = viewModel(), podcastVm: PodcastViewModel = v
                 MainNavTab.RADIO -> BrowseScreen(
                     vm = vm,
                     player = player,
-                    onGoAbout = { showAbout = true },
+                    onGoSettings = { showSettings = true },
                     snackbarHostState = snackbarHostState,
                     modifier = Modifier.padding(padding)
                 )

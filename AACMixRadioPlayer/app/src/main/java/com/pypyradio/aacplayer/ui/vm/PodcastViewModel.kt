@@ -117,6 +117,17 @@ class PodcastViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    fun moveFavoriteByIndices(fromIndex: Int, toIndex: Int) = viewModelScope.launch {
+        val currentFavs = favorites.value.toMutableList()
+        if (fromIndex in currentFavs.indices && toIndex in currentFavs.indices) {
+            val item = currentFavs.removeAt(fromIndex)
+            currentFavs.add(toIndex, item)
+            currentFavs.forEachIndexed { i, podcast ->
+                repo.updateFavoriteOrder(podcast.id, i)
+            }
+        }
+    }
     
     fun showFavorites() {
         _state.value = _state.value.copy(showingFavorites = true, showingEpisodes = false, selectedPodcast = null)

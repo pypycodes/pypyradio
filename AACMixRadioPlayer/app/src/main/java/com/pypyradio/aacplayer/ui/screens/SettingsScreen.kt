@@ -7,11 +7,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material3.*
 import androidx.compose.ui.res.painterResource
 import com.pypyradio.aacplayer.R
@@ -20,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import com.pypyradio.aacplayer.data.prefs.AppPreferences
+import com.pypyradio.aacplayer.data.prefs.SoundMode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Modifier
@@ -31,11 +36,11 @@ import com.pypyradio.aacplayer.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About & Permissions") },
+                title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -73,6 +78,131 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            Spacer(Modifier.height(32.dp))
+            
+            // Playback Settings Section
+            Text(
+                "Playback Settings",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(16.dp))
+            
+            val prefs = AppPreferences.get(LocalContext.current)
+            val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
+            val currentSoundMode by prefs.soundMode.collectAsState()
+
+            // Sound Modes Section
+            Text(
+                "Sound Modes",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "Optimize volume & boost for your activity:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SoundModeChip(
+                            selected = currentSoundMode == SoundMode.DEFAULT,
+                            onClick = { prefs.setSoundMode(SoundMode.DEFAULT) },
+                            icon = Icons.Default.AutoFixHigh,
+                            label = "Default",
+                            modifier = Modifier.weight(1f)
+                        )
+                        SoundModeChip(
+                            selected = currentSoundMode == SoundMode.STUDY,
+                            onClick = { prefs.setSoundMode(SoundMode.STUDY) },
+                            icon = Icons.AutoMirrored.Filled.MenuBook,
+                            label = "Study",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SoundModeChip(
+                            selected = currentSoundMode == SoundMode.NIGHT,
+                            onClick = { prefs.setSoundMode(SoundMode.NIGHT) },
+                            icon = Icons.Default.Nightlight,
+                            label = "Night",
+                            modifier = Modifier.weight(1f)
+                        )
+                        SoundModeChip(
+                            selected = currentSoundMode == SoundMode.LOUD,
+                            onClick = { prefs.setSoundMode(SoundMode.LOUD) },
+                            icon = Icons.AutoMirrored.Filled.VolumeUp,
+                            label = "Loud",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    val description = when(currentSoundMode) {
+                        SoundMode.DEFAULT -> "Resets volume to 50% for standard listening."
+                        SoundMode.STUDY -> "Focus mode: Volume capped at 30% with subtle boost."
+                        SoundMode.NIGHT -> "Sleep mode: Volume capped at 20% with zero boost."
+                        SoundMode.LOUD -> "Party mode: Boosted audio (+4dB) and 100% volume."
+                    }
+                    
+                    Text(
+                        description,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text(
+                            "Smart Auto-Skip",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Automatically skips to the next station instead of stopping if a stream stays buffering for over 35 seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoSkipEnabled,
+                        onCheckedChange = { prefs.setAutoSkipEnabled(it) }
+                    )
+                }
+            }
             
             Spacer(Modifier.height(32.dp))
             
@@ -139,48 +269,6 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             
             Spacer(Modifier.height(32.dp))
             
-            // Settings Section
-            Text(
-                "Playback Settings",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Spacer(Modifier.height(16.dp))
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                        Text(
-                            "Smart Auto-Skip",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Automatically skips to the next station instead of stopping if a stream stays buffering for over 35 seconds.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    val prefs = AppPreferences.get(LocalContext.current)
-                    val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
-                    Switch(
-                        checked = autoSkipEnabled,
-                        onCheckedChange = { prefs.setAutoSkipEnabled(it) }
-                    )
-                }
-            }
-            
-            Spacer(Modifier.height(32.dp))
-            
             // Links
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -210,6 +298,29 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun SoundModeChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        modifier = modifier,
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+        shape = RoundedCornerShape(12.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+        )
+    )
 }
 
 @Composable
