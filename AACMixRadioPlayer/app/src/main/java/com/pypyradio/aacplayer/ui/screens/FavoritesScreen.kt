@@ -286,7 +286,7 @@ fun FavoritesScreen(
                             modifier = Modifier.fillMaxSize().reorderable(state)
                         ) {
                             items(validRadioFavs, key = { it.stationuuid }) { st ->
-                                ReorderableItem(state, key = st.stationuuid) { isDragging ->
+                                ReorderableItem(state, key = st.stationuuid) { _ ->
                                     val dismissState = rememberSwipeToDismissBoxState(
                                         confirmValueChange = { value ->
                                             if (value == SwipeToDismissBoxValue.EndToStart) {
