@@ -173,6 +173,17 @@ class StationsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun moveFavoriteByIndices(fromIndex: Int, toIndex: Int) = viewModelScope.launch {
+        val currentFavs = favorites.value.toMutableList()
+        if (fromIndex in currentFavs.indices && toIndex in currentFavs.indices) {
+            val item = currentFavs.removeAt(fromIndex)
+            currentFavs.add(toIndex, item)
+            currentFavs.forEachIndexed { i, station ->
+                repo.updateFavoriteOrder(station.stationuuid, i)
+            }
+        }
+    }
+
     fun markStationFailed(stationId: String, errorMessage: String) = viewModelScope.launch {
         _browse.value = _browse.value.copy(
             failedStationIds = _browse.value.failedStationIds + stationId,

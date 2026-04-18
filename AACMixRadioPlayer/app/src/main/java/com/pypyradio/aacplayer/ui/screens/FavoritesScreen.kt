@@ -1,5 +1,6 @@
 package com.pypyradio.aacplayer.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,8 @@ import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
+import org.burnoutcrew.reorderable.*
+import androidx.compose.animation.core.animateDpAsState
 
 private enum class FavoritesTab { RADIO, PODCASTS }
 
@@ -110,6 +113,9 @@ fun FavoritesScreen(
     }
     
     fun playStation(st: Station) {
+        // Sync full favorites list so background service can dynamically append next streams silently
+        com.pypyradio.aacplayer.playback.ActivePlaylistCache.currentBrowseItems = validRadioFavs
+
         // Clear failed status specifically for this station so user sees a "fresh" attempt
         vm.clearFailedStatus(st.stationuuid)
         val now = System.currentTimeMillis()
@@ -123,7 +129,7 @@ fun FavoritesScreen(
         }
         
         // Toggle play/pause if same station
-        if (currentPlayingId == st.stationuuid) {
+        if (currentPlayingId == st.stationuuid && player.playerError == null) {
             if (player.isPlaying) {
                 player.pause()
             } else {
@@ -135,21 +141,26 @@ fun FavoritesScreen(
             return
         }
         
-        // Build playlist from all valid favorites for next/prev support
         try {
-            player.stop()
-            player.clearMediaItems()
+            // MICRO-WINDOW PLAYBACK: 
+            // We use exactly 3 elements (N-1, N, N+1) per user request to initialize standard basic Next/Prev availability.
+            val foundIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
+            val window = 1 // Exact offset size for mini Next/Prev behavior
+            val from = maxOf(0, foundIndex - window)
+            val to = minOf(validRadioFavs.size, foundIndex + window + 1)
             
-            val mediaItems = validRadioFavs.map { createStationMediaItem(it) }
-            val startIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
-                .coerceAtLeast(0)
+            val slice = validRadioFavs.subList(from, to)
+            val mediaItems = slice.map { createStationMediaItem(it) }
+            val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
             
-            player.setMediaItems(mediaItems, startIndex, androidx.media3.common.C.TIME_UNSET)
+            player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
             if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
                 player.prepare()
             }
             player.play()
-            currentPlayingId = st.stationuuid
+            
+            // Note: We do NOT set currentPlayingId here manually.
+            // We wait for the player to transition so the UI state stays in sync.
         } catch (e: Exception) {
             vm.markStationFailed(st.stationuuid, "Playback error")
         }
@@ -267,24 +278,53 @@ fun FavoritesScreen(
                             }
                         }
                     } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            itemsIndexed(validRadioFavs, key = { _, it -> it.stationuuid }) { index, st ->
-                                val isFailed = failedStationIds.contains(st.stationuuid)
-                                val isCurrentStation = currentPlayingId == st.stationuuid
-                                val isCurrentPlaying = isCurrentStation && isPlaying
-                                val isCurrentBuffering = isCurrentStation && isBuffering
-                                FavStationRow(
-                                    st = st,
-                                    isFailed = isFailed,
-                                    isPlaying = isCurrentPlaying,
-                                    isBuffering = isCurrentBuffering,
-                                    isFirst = index == 0,
-                                    isLast = index == validRadioFavs.lastIndex,
-                                    onRowClick = { playStation(st) },
-                                    onRemove = { vm.toggleFavorite(st) },
-                                    onMoveUp = { vm.moveFavorite(st.stationuuid, -1) },
-                                    onMoveDown = { vm.moveFavorite(st.stationuuid, 1) }
-                                )
+                        val state = rememberReorderableLazyListState(onMove = { from, to ->
+                            vm.moveFavoriteByIndices(from.index, to.index)
+                        })
+                        LazyColumn(
+                            state = state.listState,
+                            modifier = Modifier.fillMaxSize().reorderable(state)
+                        ) {
+                            items(validRadioFavs, key = { it.stationuuid }) { st ->
+                                ReorderableItem(state, key = st.stationuuid) { isDragging ->
+                                    val dismissState = rememberSwipeToDismissBoxState(
+                                        confirmValueChange = { value ->
+                                            if (value == SwipeToDismissBoxValue.EndToStart) {
+                                                vm.toggleFavorite(st)
+                                                true
+                                            } else false
+                                        }
+                                    )
+                                    SwipeToDismissBox(
+                                        state = dismissState,
+                                        enableDismissFromStartToEnd = false,
+                                        backgroundContent = {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxSize()
+                                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                                                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+                                                    .padding(16.dp),
+                                                contentAlignment = Alignment.CenterEnd
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                            }
+                                        }
+                                    ) {
+                                        val isFailed = failedStationIds.contains(st.stationuuid)
+                                        val isCurrentStation = currentPlayingId == st.stationuuid
+                                        val isCurrentPlaying = isCurrentStation && isPlaying
+                                        val isCurrentBuffering = isCurrentStation && isBuffering
+                                        FavStationRow(
+                                            st = st,
+                                            isFailed = isFailed,
+                                            isPlaying = isCurrentPlaying,
+                                            isBuffering = isCurrentBuffering,
+                                            onRowClick = { playStation(st) },
+                                            modifier = Modifier.detectReorderAfterLongPress(state)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -368,17 +408,13 @@ private fun FavStationRow(
     isFailed: Boolean = false,
     isPlaying: Boolean, 
     isBuffering: Boolean = false,
-    isFirst: Boolean,
-    isLast: Boolean,
-    onRowClick: () -> Unit, 
-    onRemove: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onRowClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isActive = isPlaying || isBuffering
     
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
@@ -472,30 +508,7 @@ private fun FavStationRow(
                     }
                 }
             }
-            Column {
-                if (!isFirst) {
-                    IconButton(onClick = onMoveUp, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(24.dp))
-                }
-                if (!isLast) {
-                    IconButton(onClick = onMoveDown, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(24.dp))
-                }
-            }
             Spacer(Modifier.width(8.dp))
-            FilledTonalIconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove", modifier = Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(4.dp))
             FilledTonalIconButton(
                 onClick = onRowClick,
                 modifier = Modifier.size(40.dp),

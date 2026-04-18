@@ -872,10 +872,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     private fun startBufferingTimeoutCheck() {
         cancelBufferingTimeoutCheck()
         bufferingTimeoutJob = serviceScope.launch {
-            delay(20000) // 20 seconds timeout - give slow networks a fair chance
+            val timeoutValue = 35000L // 35 seconds timeout
+            delay(timeoutValue)
             val currentState = player?.playbackState
             if (currentState == Player.STATE_BUFFERING) {
-                Log.w(TAG, "Buffering timeout (20s) - auto-skipping to next station")
+                Log.w(TAG, "Buffering timeout (35s) - station may be dead")
                 handlePlaybackError(RuntimeException("Buffering timeout - station may be dead"))
             }
         }
@@ -895,10 +896,15 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             failedStations.add(currentMediaId)
         }
         
-        // Don't re-enter if already skipping, but ensure skipping continues
-        if (isAutoSkipping) return
-        
-        skipToNextStation("Playback error")
+        // Check user preferences for Smart Auto-Skip
+        if (prefs.isAutoSkipEnabled()) {
+            if (isAutoSkipping) return
+            Log.i(TAG, "Smart Auto-Skip enabled: Attempting to move to next station.")
+            skipToNextStation("Playback error")
+        } else {
+            // Let the UI handle the retry/error state. Auto-skipping inherently destroys the user's intended playback context.
+            Log.i(TAG, "Smart Auto-Skip disabled: Halting player in error state.")
+        }
     }
     
     private fun skipToNextStation(reason: String) {

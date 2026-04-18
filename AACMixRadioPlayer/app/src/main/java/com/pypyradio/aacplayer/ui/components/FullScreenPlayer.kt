@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -268,7 +269,10 @@ fun FullScreenPlayer(
             
             Spacer(Modifier.weight(1f))
             
-            // Interaction Row (Favorite & Timer)
+            val prefs = com.pypyradio.aacplayer.data.prefs.AppPreferences.get(androidx.compose.ui.platform.LocalContext.current)
+            val autoSkipEnabled by prefs.autoSkipEnabled.collectAsState()
+
+            // Interaction Row (Favorite, Auto-Skip, Timer)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -282,10 +286,28 @@ fun FullScreenPlayer(
                         modifier = Modifier.size(32.dp)
                     )
                 }
+                
+                TextButton(
+                    onClick = { prefs.setAutoSkipEnabled(!autoSkipEnabled) }
+                ) {
+                    Icon(
+                        imageVector = if (autoSkipEnabled) Icons.Default.Autorenew else Icons.Default.SyncDisabled,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (autoSkipEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (autoSkipEnabled) "Auto-Skip On" else "Auto-Skip Off",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (autoSkipEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
                 TextButton(onClick = onSleepTimerClick) {
-                    Icon(Icons.Default.Timer, contentDescription = null)
+                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(if (sleepTimerMinutes > 0) "${sleepTimerMinutes}m" else "Sleep Timer")
+                    Text(if (sleepTimerMinutes > 0) "${sleepTimerMinutes}m" else "Timer")
                 }
             }
             
