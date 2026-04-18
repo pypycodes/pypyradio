@@ -220,7 +220,7 @@ fun BrowseScreen(
             val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
             if (foundIndex == -1) return // CRITICAL FIX: Prevent crashes if list alters underneath
             
-            val window = 15 // Increased from 1 to 15 to give users a reasonable buffer in system UI
+            val window = 1 // Use N-1, N, N+1 to stay well within Binder IPC limits and avoid playback failure
             val from = maxOf(0, foundIndex - window)
             val to = minOf(displayStations.size, foundIndex + window + 1)
             

@@ -148,7 +148,7 @@ fun FavoritesScreen(
             val foundIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
             if (foundIndex == -1) return // CRITICAL FIX: Prevent crash if station list changed
             
-            val window = 15 // Increased from 1 to 15 to give users a proper scrollable list in notifications
+            val window = 1 // Use N-1, N, N+1 to stay well within Binder IPC limits and avoid playback failure
             val from = maxOf(0, foundIndex - window)
             val to = minOf(validRadioFavs.size, foundIndex + window + 1)
             

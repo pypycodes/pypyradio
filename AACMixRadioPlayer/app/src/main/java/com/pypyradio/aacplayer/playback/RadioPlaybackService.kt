@@ -666,7 +666,7 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             val foundIndex = stations.indexOfFirst { it.stationuuid == tappedMediaId }
             if (foundIndex < 0) return null
             
-            val window = 15
+            val window = 1 // Original stable N-1, N, N+1 logic to avoid Binder IPC limits
             val from = maxOf(0, foundIndex - window)
             val to = minOf(stations.size, foundIndex + window + 1)
             val slice = stations.subList(from, to)
