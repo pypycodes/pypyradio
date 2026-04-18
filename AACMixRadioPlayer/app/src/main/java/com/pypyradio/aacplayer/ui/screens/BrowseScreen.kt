@@ -72,7 +72,7 @@ private val BROWSE_CATEGORIES = listOf(
 fun BrowseScreen(
     vm: StationsViewModel,
     player: Player,
-    onGoAbout: () -> Unit = {},
+    onGoSettings: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {
@@ -216,10 +216,11 @@ fun BrowseScreen(
 
         try {
             // MICRO-WINDOW PLAYBACK: 
-            // We use exactly 3 elements (N-1, N, N+1) per user request to initialize standard basic Next/Prev availability.
             // The background PlayerErrorListener dynamic timeline expansion will natively append continuously as you skip!
             val foundIndex = displayStations.indexOfFirst { it.stationuuid == st.stationuuid }
-            val window = 1 // Exact offset size for mini Next/Prev behavior
+            if (foundIndex == -1) return // CRITICAL FIX: Prevent crashes if list alters underneath
+            
+            val window = 15 // Increased from 1 to 15 to give users a reasonable buffer in system UI
             val from = maxOf(0, foundIndex - window)
             val to = minOf(displayStations.size, foundIndex + window + 1)
             
@@ -251,11 +252,13 @@ fun BrowseScreen(
             
             val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
             
-            player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
-            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                player.prepare()
+            if (mediaItems.isNotEmpty()) {
+                player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
+                player.play()
             }
-            player.play()
             
             // Note: We do NOT set currentPlayingId here manually.
             // We wait for the player to transition so the UI state stays in sync 
@@ -313,10 +316,10 @@ fun BrowseScreen(
                         )
                     },
                     actions = {
-                        IconButton(onClick = onGoAbout) {
+                        IconButton(onClick = onGoSettings) {
                             Icon(
-                                Icons.Default.Info,
-                                contentDescription = "About",
+                                Icons.Default.Settings,
+                                contentDescription = "Settings",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -564,8 +567,8 @@ private fun StationRow(
     val containerColor by animateColorAsState(
         targetValue = when {
             hasError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
-            isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            isActive -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
             else -> MaterialTheme.colorScheme.surface
         },
         animationSpec = tween(300),
@@ -577,8 +580,9 @@ private fun StationRow(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp),
-        onClick = onRowClick
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive || hasError) 4.dp else 1.dp),
+        border = if (isActive && !hasError) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
+        onClick = { if (isFailed && !hasError) onRetry() else onRowClick() }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),

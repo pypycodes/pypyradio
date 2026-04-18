@@ -143,9 +143,12 @@ fun FavoritesScreen(
         
         try {
             // MICRO-WINDOW PLAYBACK: 
-            // We use exactly 3 elements (N-1, N, N+1) per user request to initialize standard basic Next/Prev availability.
+            // We use a reasonably sized window (e.g. 15 items on each side) to provide 
+            // smooth Next/Prev scrolling without hitting Binder IPC limits.
             val foundIndex = validRadioFavs.indexOfFirst { it.stationuuid == st.stationuuid }
-            val window = 1 // Exact offset size for mini Next/Prev behavior
+            if (foundIndex == -1) return // CRITICAL FIX: Prevent crash if station list changed
+            
+            val window = 15 // Increased from 1 to 15 to give users a proper scrollable list in notifications
             val from = maxOf(0, foundIndex - window)
             val to = minOf(validRadioFavs.size, foundIndex + window + 1)
             
@@ -153,11 +156,13 @@ fun FavoritesScreen(
             val mediaItems = slice.map { createStationMediaItem(it) }
             val targetIndex = slice.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
             
-            player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
-            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                player.prepare()
+            if (mediaItems.isNotEmpty()) {
+                player.setMediaItems(mediaItems, targetIndex, androidx.media3.common.C.TIME_UNSET)
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    player.prepare()
+                }
+                player.play()
             }
-            player.play()
             
             // Note: We do NOT set currentPlayingId here manually.
             // We wait for the player to transition so the UI state stays in sync.
@@ -381,17 +386,46 @@ fun FavoritesScreen(
                             }
                         }
                         else -> {
-                            LazyColumn(Modifier.fillMaxSize()) {
-                                itemsIndexed(podcastFavs, key = { _, it -> it.id }) { index, podcast ->
-                                    FavPodcastRow(
-                                        podcast = podcast,
-                                        isFirst = index == 0,
-                                        isLast = index == podcastFavs.lastIndex,
-                                        onRemove = { podcastVm.toggleFavorite(podcast) },
-                                        onMoveUp = { podcastVm.moveFavorite(podcast.id, -1) },
-                                        onMoveDown = { podcastVm.moveFavorite(podcast.id, 1) },
-                                        onClick = { podcastVm.loadFavoriteEpisodes(podcast) }
-                                    )
+                            val state = rememberReorderableLazyListState(onMove = { from, to ->
+                                podcastVm.moveFavoriteByIndices(from.index, to.index)
+                            })
+                            LazyColumn(
+                                state = state.listState,
+                                modifier = Modifier.fillMaxSize().reorderable(state)
+                            ) {
+                                items(podcastFavs, key = { it.id }) { podcast ->
+                                    ReorderableItem(state, key = podcast.id) { _ ->
+                                        val dismissState = rememberSwipeToDismissBoxState(
+                                            confirmValueChange = { value ->
+                                                if (value == SwipeToDismissBoxValue.EndToStart) {
+                                                    podcastVm.toggleFavorite(podcast)
+                                                    true
+                                                } else false
+                                            }
+                                        )
+                                        SwipeToDismissBox(
+                                            state = dismissState,
+                                            enableDismissFromStartToEnd = false,
+                                            backgroundContent = {
+                                                Box(
+                                                    Modifier
+                                                        .fillMaxSize()
+                                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                                        .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+                                                        .padding(16.dp),
+                                                    contentAlignment = Alignment.CenterEnd
+                                                ) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                                }
+                                            }
+                                        ) {
+                                            FavPodcastRow(
+                                                podcast = podcast,
+                                                onClick = { podcastVm.loadFavoriteEpisodes(podcast) },
+                                                modifier = Modifier.detectReorderAfterLongPress(state)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -419,11 +453,12 @@ private fun FavStationRow(
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
-                isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                isActive -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                isFailed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
+        border = if (isActive) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 4.dp else 1.dp),
         onClick = onRowClick
     ) {
@@ -540,15 +575,11 @@ private fun FavStationRow(
 @Composable
 private fun FavPodcastRow(
     podcast: Podcast,
-    isFirst: Boolean,
-    isLast: Boolean,
-    onRemove: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -586,30 +617,11 @@ private fun FavPodcastRow(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Column {
-                if (!isFirst) {
-                    IconButton(onClick = onMoveUp, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up", modifier = Modifier.size(18.dp))
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(24.dp))
-                }
-                if (!isLast) {
-                    IconButton(onClick = onMoveDown, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down", modifier = Modifier.size(18.dp))
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(24.dp))
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            FilledTonalIconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(36.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color(0xFFFFE0E0))
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color(0xFFE91E63), modifier = Modifier.size(18.dp))
-            }
+            Icon(
+                Icons.Default.DragHandle,
+                contentDescription = "Reorder",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }
@@ -626,11 +638,12 @@ private fun FavEpisodeRow(
             .padding(horizontal = 12.dp, vertical = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isPlaying) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
         ),
+        border = if (isPlaying) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = if (isPlaying) 4.dp else 1.dp),
         onClick = onClick
     ) {

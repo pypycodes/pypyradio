@@ -322,9 +322,11 @@ fun FullScreenPlayer(
                 // Prev
                 IconButton(
                     onClick = { 
-                        player.seekToPreviousMediaItem()
-                        player.prepare()
-                        player.play()
+                        if (player.hasPreviousMediaItem()) {
+                            player.seekToPreviousMediaItem()
+                            player.prepare()
+                            player.play()
+                        }
                     },
                     enabled = hasPrev,
                     modifier = Modifier.size(56.dp)
@@ -388,9 +390,11 @@ fun FullScreenPlayer(
                     onClick = { 
                         hasError = false
                         errorMessage = null
-                        player.seekToNextMediaItem()
-                        player.prepare()
-                        player.play()
+                        if (player.hasNextMediaItem()) {
+                            player.seekToNextMediaItem()
+                            player.prepare()
+                            player.play()
+                        }
                     },
                     enabled = hasNext,
                     modifier = Modifier.size(56.dp)
@@ -406,9 +410,11 @@ fun FullScreenPlayer(
                     onClick = {
                         hasError = false
                         errorMessage = null
-                        player.seekToNextMediaItem()
-                        player.prepare()
-                        player.play()
+                        if (player.hasNextMediaItem()) {
+                            player.seekToNextMediaItem()
+                            player.prepare()
+                            player.play()
+                        }
                     }
                 ) {
                     Icon(

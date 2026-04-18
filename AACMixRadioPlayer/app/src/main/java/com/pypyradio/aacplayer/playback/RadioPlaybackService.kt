@@ -201,6 +201,14 @@ class RadioPlaybackService : MediaLibraryService() {
             loadPodcasts()
             refreshFavorites()
 
+            // Observe sound mode changes
+            serviceScope.launch {
+                prefs.soundMode.collect { mode ->
+                    Log.i(TAG, "Sound Mode Changed: $mode")
+                    applySoundMode(mode)
+                }
+            }
+
             Log.i(TAG, "Service initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Initialization error", e)
@@ -816,6 +824,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     }
                 }
             }
+
+            // Apply current sound mode constraints on every track change
+            applySoundMode(prefs.getSoundMode())
             
             // DYNAMIC TIMELINE SHIFTING
             // Allows the user to continuously hit Next or Prev sequentially, automatically
@@ -847,6 +858,19 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             }
         }
 
+        override fun onVolumeChanged(volume: Float) {
+            val mode = prefs.getSoundMode()
+            val maxVol = when(mode) {
+                com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> 0.3f
+                com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0.2f
+                else -> 1.0f
+            }
+            if (volume > maxVol) {
+                Log.d(TAG, "Clamping volume to $maxVol due to $mode mode")
+                player?.volume = maxVol
+            }
+        }
+
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             super.onAudioSessionIdChanged(audioSessionId)
             try {
@@ -855,12 +879,20 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 
                 // Create new enhancer for the current audio session
                 val enhancer = LoudnessEnhancer(audioSessionId)
-                // Set a safe but useful target gain in millibels (mB)
-                // 150mB is approximately +1.5dB boost
-                enhancer.setTargetGain(150)
-                enhancer.enabled = true
+                
+                // Get current mode and apply its target gain
+                val mode = prefs.getSoundMode()
+                val targetGain = when(mode) {
+                    com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> 400
+                    com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> 100
+                    com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0
+                    else -> 150
+                }
+                
+                enhancer.setTargetGain(targetGain)
+                enhancer.enabled = targetGain > 0
                 loudnessEnhancer = enhancer
-                Log.i(TAG, "Loudness Enhancer enabled (+1.5dB boost) for session $audioSessionId")
+                Log.i(TAG, "Loudness Enhancer enabled (${targetGain}mB) for session $audioSessionId in $mode mode")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to initialize Loudness Enhancer", e)
             }
@@ -904,6 +936,39 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         } else {
             // Let the UI handle the retry/error state. Auto-skipping inherently destroys the user's intended playback context.
             Log.i(TAG, "Smart Auto-Skip disabled: Halting player in error state.")
+        }
+    }
+    
+    private fun applySoundMode(mode: com.pypyradio.aacplayer.data.prefs.SoundMode) {
+        val p = player ?: return
+        when (mode) {
+            com.pypyradio.aacplayer.data.prefs.SoundMode.DEFAULT -> {
+                p.volume = 0.5f
+                updateLoudnessBoost(150) 
+            }
+            com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> {
+                if (p.volume > 0.3f) p.volume = 0.3f
+                updateLoudnessBoost(100)
+            }
+            com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> {
+                if (p.volume > 0.2f) p.volume = 0.2f
+                updateLoudnessBoost(0)
+            }
+            com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> {
+                p.volume = 1.0f
+                updateLoudnessBoost(400)
+            }
+        }
+    }
+
+    private fun updateLoudnessBoost(mB: Int) {
+        try {
+            loudnessEnhancer?.let {
+                it.setTargetGain(mB)
+                it.enabled = mB > 0
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update loudness boost", e)
         }
     }
     
