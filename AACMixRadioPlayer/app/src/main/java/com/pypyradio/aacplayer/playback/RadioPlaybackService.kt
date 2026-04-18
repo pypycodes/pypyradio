@@ -22,6 +22,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import android.os.Bundle
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.DynamicsProcessing
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.google.common.collect.ImmutableList
@@ -38,6 +39,7 @@ import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.data.prefs.AppPreferences
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
 import com.pypyradio.aacplayer.data.repo.StationRepository
+import com.pypyradio.aacplayer.data.prefs.SoundMode
 
 /**
  * RadioPlaybackService - Media3 MediaLibraryService for Android Auto
@@ -127,6 +129,7 @@ class RadioPlaybackService : MediaLibraryService() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var dynamicsProcessing: DynamicsProcessing? = null
 
     override fun onCreate() {
         Log.i(TAG, "===== SERVICE CREATED =====")
@@ -356,6 +359,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             it.release()
         }
         loudnessEnhancer = null
+        dynamicsProcessing?.let {
+            it.enabled = false
+            it.release()
+        }
+        dynamicsProcessing = null
 
         super.onDestroy()
     }
@@ -871,29 +879,13 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             }
         }
 
-        override fun onVolumeChanged(volume: Float) {
-            val mode = prefs.getSoundMode()
-            val maxVol = when(mode) {
-                com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> 0.3f
-                com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0.2f
-                else -> 1.0f
-            }
-            if (volume > maxVol) {
-                Log.d(TAG, "Clamping volume to $maxVol due to $mode mode")
-                player?.volume = maxVol
-            }
-        }
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             super.onAudioSessionIdChanged(audioSessionId)
             try {
-                // Release old enhancer
+                // 1. Setup Loudness Enhancer
                 loudnessEnhancer?.release()
-                
-                // Create new enhancer for the current audio session
                 val enhancer = LoudnessEnhancer(audioSessionId)
-                
-                // Get current mode and apply its target gain
                 val mode = prefs.getSoundMode()
                 val targetGain = when(mode) {
                     com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> 400
@@ -901,13 +893,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                     com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0
                     else -> 150
                 }
-                
                 enhancer.setTargetGain(targetGain)
                 enhancer.enabled = targetGain > 0
                 loudnessEnhancer = enhancer
-                Log.i(TAG, "Loudness Enhancer enabled (${targetGain}mB) for session $audioSessionId in $mode mode")
+
+                // 2. Setup Dynamics Processing (DRC)
+                dynamicsProcessing?.release()
+                // Initialize with a standard base config
+                val baseConfig = createDRCConfig()
+                val dp = DynamicsProcessing(0, audioSessionId, baseConfig)
+                dynamicsProcessing = dp
+                applySoundMode(mode) // This will now apply specific band settings
+                
+                Log.i(TAG, "Audio FX initialized for session $audioSessionId in $mode mode")
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to initialize Loudness Enhancer", e)
+                Log.w(TAG, "Failed to initialize Audio FX", e)
             }
         }
     }
@@ -954,24 +954,80 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
     
     private fun applySoundMode(mode: com.pypyradio.aacplayer.data.prefs.SoundMode) {
         val p = player ?: return
+        p.volume = 1.0f // Maintain healthy signal for DRC
+        
+        // Apply DynamicsProcessing settings in real-time
+        try {
+            dynamicsProcessing?.let { dp ->
+                applyDRCSettings(dp, mode)
+                dp.enabled = true
+                Log.i(TAG, "DRC Settings applied for mode: $mode")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply DRC settings", e)
+        }
+
+        // Maintain LoudnessEnhancer fallback
         when (mode) {
-            com.pypyradio.aacplayer.data.prefs.SoundMode.DEFAULT -> {
-                p.volume = 0.5f
-                updateLoudnessBoost(150) 
-            }
-            com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> {
-                if (p.volume > 0.3f) p.volume = 0.3f
-                updateLoudnessBoost(100)
-            }
-            com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> {
-                if (p.volume > 0.2f) p.volume = 0.2f
-                updateLoudnessBoost(0)
-            }
-            com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> {
-                p.volume = 1.0f
-                updateLoudnessBoost(400)
+            com.pypyradio.aacplayer.data.prefs.SoundMode.DEFAULT -> updateLoudnessBoost(150) 
+            com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> updateLoudnessBoost(100)
+            com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> updateLoudnessBoost(0)
+            com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> updateLoudnessBoost(400)
+        }
+    }
+
+    private fun applyDRCSettings(dp: DynamicsProcessing, mode: com.pypyradio.aacplayer.data.prefs.SoundMode) {
+        val channelIndices = intArrayOf(0, 1) // L, R
+
+        for (ch in channelIndices) {
+            when (mode) {
+                com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> {
+                    // MbcBand(enabled, cutoff, attack, release, ratio, threshold, knee, noiseGate, expanderRatio, preGain, postGain)
+                    val mbcBand = DynamicsProcessing.MbcBand(true, 20000f, 5f, 50f, 6f, -24f, 6f, -60f, 1f, 0f, 0f)
+                    dp.setMbcBandByChannelIndex(ch, 0, mbcBand)
+                    
+                    // Limiter(inUse, enabled, linkGroup, attack, release, ratio, threshold, postGain)
+                    val limiter = DynamicsProcessing.Limiter(true, true, 0, 1f, 20f, 20f, -2f, 0f)
+                    dp.setLimiterByChannelIndex(ch, limiter)
+                }
+                com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> {
+                    val mbcBand = DynamicsProcessing.MbcBand(true, 20000f, 10f, 100f, 2.5f, -18f, 6f, -60f, 1f, 0f, 0f)
+                    dp.setMbcBandByChannelIndex(ch, 0, mbcBand)
+                    
+                    val limiter = DynamicsProcessing.Limiter(true, true, 0, 2f, 50f, 20f, -3f, 0f)
+                    dp.setLimiterByChannelIndex(ch, limiter)
+                }
+                com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> {
+                    val mbcBand = DynamicsProcessing.MbcBand(true, 20000f, 2f, 50f, 4f, -12f, 6f, -60f, 1f, 0f, 0f)
+                    dp.setMbcBandByChannelIndex(ch, 0, mbcBand)
+                    
+                    val limiter = DynamicsProcessing.Limiter(true, true, 0, 1f, 10f, 20f, -1f, 0f)
+                    dp.setLimiterByChannelIndex(ch, limiter)
+                }
+                else -> {
+                    val mbcBand = DynamicsProcessing.MbcBand(false, 20000f, 10f, 100f, 1f, 0f, 6f, -60f, 1f, 0f, 0f)
+                    dp.setMbcBandByChannelIndex(ch, 0, mbcBand)
+                    
+                    val limiter = DynamicsProcessing.Limiter(true, true, 0, 2f, 50f, 20f, -1f, 0f)
+                    dp.setLimiterByChannelIndex(ch, limiter)
+                }
             }
         }
+    }
+
+    private fun createDRCConfig(): DynamicsProcessing.Config {
+        // Use a standard base config (Stereo, 1-band MBC, Limiter on)
+        return DynamicsProcessing.Config.Builder(
+            DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+            2, // channelCount
+            false, // usePreEq
+            0,
+            true, // useMbc
+            1, // mbcBandCount
+            false, // usePostEq
+            0,
+            true // useLimiter
+        ).build()
     }
 
     private fun updateLoudnessBoost(mB: Int) {
