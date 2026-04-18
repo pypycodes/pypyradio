@@ -16,22 +16,37 @@ import androidx.media3.session.SessionToken
 import androidx.tv.foundation.lazy.grid.TvGridCells
 import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.tv.foundation.lazy.grid.items
+import androidx.tv.foundation.lazy.grid.TvGridItemSpan
 import androidx.tv.material3.*
 import com.google.common.util.concurrent.MoreExecutors
 import com.pypyradio.aacplayer.playback.RadioPlaybackService
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
+import com.pypyradio.aacplayer.ui.vm.PodcastViewModel
 import com.pypyradio.aacplayer.data.model.Station
+import com.pypyradio.aacplayer.data.model.Podcast
+import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Star
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.text.KeyboardOptions
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun TvAppRoot(vm: StationsViewModel = viewModel()) {
+fun TvAppRoot(
+    vm: StationsViewModel = viewModel(),
+    pvm: PodcastViewModel = viewModel()
+) {
     val context = LocalContext.current
     
     // Connect to RadioPlaybackService
@@ -57,20 +72,9 @@ fun TvAppRoot(vm: StationsViewModel = viewModel()) {
         }
     }
     
-    val state by vm.browse.collectAsState()
-    val favorites by vm.favorites.collectAsState()
-    
-    // Track selected tab on TV
+    // State and Tab variables
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Discovery", "Favorites")
-    
-    val stations = remember(state.stations, favorites, selectedTabIndex) {
-        if (selectedTabIndex == 0) {
-            state.stations.filter { it.urlResolved.isNotBlank() }
-        } else {
-            favorites
-        }
-    }
+    val tabs = listOf("Radio", "Podcasts", "Favorites")
     
     // Track playback state
     var currentMediaId by remember { mutableStateOf<String?>(null) }
@@ -115,10 +119,15 @@ fun TvAppRoot(vm: StationsViewModel = viewModel()) {
                             .padding(48.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        TvNowPlaying(controller, isPlaying)
+                        TvNowPlaying(
+                            controller, 
+                            isPlaying, 
+                            vm,
+                            onToggleFavorite = { vm.toggleFavorite(it) }
+                        )
                     }
                     
-                    // Right Panel: Station Grid
+                    // Right Panel: Content Area
                     Column(
                         modifier = Modifier
                             .weight(0.6f)
@@ -153,27 +162,10 @@ fun TvAppRoot(vm: StationsViewModel = viewModel()) {
                             }
                         }
                         
-                        if (stations.isEmpty() && selectedTabIndex == 1) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("No favorites added yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        } else {
-                            TvLazyVerticalGrid(
-                                columns = TvGridCells.Fixed(3),
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(stations, key = { it.stationuuid }) { station ->
-                                    TvStationCard(
-                                        station = station,
-                                        isCurrent = station.stationuuid == currentMediaId,
-                                        onClick = {
-                                            playStation(controller, station, stations)
-                                        }
-                                    )
-                                }
-                            }
+                        when (selectedTabIndex) {
+                            0 -> TvRadioSection(vm, currentMediaId, controller)
+                            1 -> TvPodcastSection(pvm, controller)
+                            2 -> TvFavoritesSection(vm, pvm, currentMediaId, controller)
                         }
                     }
                 }
@@ -184,7 +176,7 @@ fun TvAppRoot(vm: StationsViewModel = viewModel()) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun TvStationCard(station: Station, isCurrent: Boolean, onClick: () -> Unit) {
+fun TvStationCard(station: Station, isCurrent: Boolean, isFavorite: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
@@ -200,11 +192,21 @@ fun TvStationCard(station: Station, isCurrent: Boolean, onClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            AsyncImage(
-                model = station.favicon,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp).padding(bottom = 8.dp)
-            )
+            Box(contentAlignment = Alignment.TopEnd) {
+                AsyncImage(
+                    model = station.favicon,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp).padding(bottom = 8.dp)
+                )
+                if (isFavorite) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp).offset(x = 4.dp, y = (-4).dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
             Text(
                 station.name,
                 style = MaterialTheme.typography.labelMedium,
@@ -224,9 +226,21 @@ fun TvStationCard(station: Station, isCurrent: Boolean, onClick: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun TvNowPlaying(player: Player?, isPlaying: Boolean) {
+fun TvNowPlaying(
+    player: Player?, 
+    isPlaying: Boolean, 
+    vm: StationsViewModel,
+    onToggleFavorite: (Station) -> Unit
+) {
     val mediaItem = player?.currentMediaItem
     val metadata = mediaItem?.mediaMetadata
+    val state by vm.browse.collectAsState()
+    val favorites by vm.favorites.collectAsState()
+    
+    val currentStation = remember(mediaItem, state.stations) {
+        state.stations.find { it.stationuuid == mediaItem?.mediaId }
+    }
+    val isFavorite = favorites.any { it.stationuuid == currentStation?.stationuuid }
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
@@ -263,6 +277,182 @@ fun TvNowPlaying(player: Player?, isPlaying: Boolean) {
                 Spacer(Modifier.width(8.dp))
                 Text(if (isPlaying) "Pause" else "Play")
             }
+            
+            if (currentStation != null) {
+                Spacer(Modifier.width(16.dp))
+                OutlinedButton(onClick = { onToggleFavorite(currentStation) }) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isFavorite) "Unfavorite" else "Favorite")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvRadioSection(vm: StationsViewModel, currentMediaId: String?, controller: Player?) {
+    val state by vm.browse.collectAsState()
+    val favorites by vm.favorites.collectAsState()
+    
+    Column {
+        TextField(
+            value = state.query,
+            onValueChange = { vm.setQuery(it); vm.search() },
+            placeholder = { Text("Search Radio Stations...") },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+        )
+        
+        val stations = state.stations.filter { it.urlResolved.isNotBlank() }
+        
+        TvLazyVerticalGrid(
+            columns = TvGridCells.Fixed(3),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(stations, key = { it.stationuuid }) { station ->
+                val isFavorite = favorites.any { it.stationuuid == station.stationuuid }
+                TvStationCard(
+                    station = station,
+                    isCurrent = station.stationuuid == currentMediaId,
+                    isFavorite = isFavorite,
+                    onClick = { playStation(controller, station, stations) }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvPodcastSection(pvm: PodcastViewModel, controller: Player?) {
+    val state by pvm.state.collectAsState()
+    
+    Column {
+        if (!state.showingEpisodes) {
+            TextField(
+                value = state.query,
+                onValueChange = { pvm.setQuery(it); pvm.search() },
+                placeholder = { Text("Search Podcasts...") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+            )
+            
+            TvLazyVerticalGrid(
+                columns = TvGridCells.Fixed(3),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(state.podcasts, key = { it.id }) { podcast ->
+                    TvPodcastCard(podcast = podcast, onClick = { pvm.loadEpisodes(podcast) })
+                }
+            }
+        } else {
+            // Show episodes
+            Column {
+                Button(onClick = { pvm.backToPodcasts() }) {
+                    Text("Back to Search")
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(state.selectedPodcast?.title ?: "Episodes", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+                
+                TvLazyVerticalGrid(
+                    columns = TvGridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(state.episodes) { episode ->
+                        Surface(
+                            onClick = { playPodcast(controller, episode) },
+                            modifier = Modifier.padding(8.dp).fillMaxWidth()
+                        ) {
+                            Text(episode.title, modifier = Modifier.padding(8.dp), maxLines = 2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvFavoritesSection(vm: StationsViewModel, pvm: PodcastViewModel, currentMediaId: String?, controller: Player?) {
+    val favorites by vm.favorites.collectAsState()
+    val pFavorites by pvm.favorites.collectAsState()
+    
+    if (favorites.isEmpty() && pFavorites.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No favorites added yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        TvLazyVerticalGrid(
+            columns = TvGridCells.Fixed(3),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            if (favorites.isNotEmpty()) {
+                item(span = { TvGridItemSpan(3) }) {
+                    Text("Favorite Radio Stations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp, top = 16.dp))
+                }
+                items(favorites, key = { it.stationuuid }) { station ->
+                    TvStationCard(
+                        station = station,
+                        isCurrent = station.stationuuid == currentMediaId,
+                        isFavorite = true,
+                        onClick = { playStation(controller, station, favorites) }
+                    )
+                }
+            }
+            
+            if (pFavorites.isNotEmpty()) {
+                item(span = { TvGridItemSpan(3) }) {
+                    Text("Favorite Podcasts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp, top = 24.dp))
+                }
+                items(pFavorites, key = { it.id }) { podcast ->
+                    TvPodcastCard(podcast = podcast, onClick = { pvm.loadEpisodes(podcast) })
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvPodcastCard(podcast: Podcast, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+        modifier = Modifier.aspectRatio(1f)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            AsyncImage(
+                model = podcast.imageUrl,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp).padding(bottom = 8.dp)
+            )
+            Text(
+                podcast.title,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -270,7 +460,6 @@ fun TvNowPlaying(player: Player?, isPlaying: Boolean) {
 private fun playStation(player: Player?, st: Station, allStations: List<Station>) {
     val ctrl = player ?: return
     
-    // Reuse the same logic as phone but simplified for TV
     val mediaItems = allStations.map { station ->
         MediaItem.Builder()
             .setMediaId(station.stationuuid)
@@ -287,6 +476,25 @@ private fun playStation(player: Player?, st: Station, allStations: List<Station>
     
     val index = allStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
     ctrl.setMediaItems(mediaItems, index, 0L)
+    ctrl.prepare()
+    ctrl.play()
+}
+
+private fun playPodcast(player: Player?, episode: PodcastEpisode) {
+    val ctrl = player ?: return
+    val mediaItem = MediaItem.Builder()
+        .setMediaId(episode.id)
+        .setUri(episode.audioUrl)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(episode.title)
+                .setArtist("Podcast")
+                .setArtworkUri(episode.imageUrl?.let { android.net.Uri.parse(it) })
+                .build()
+        )
+        .build()
+    
+    ctrl.setMediaItem(mediaItem)
     ctrl.prepare()
     ctrl.play()
 }

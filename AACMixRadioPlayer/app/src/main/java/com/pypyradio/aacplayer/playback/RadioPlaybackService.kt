@@ -20,9 +20,9 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
-import android.os.Bundle
-import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.DynamicsProcessing
+import android.media.audiofx.LoudnessEnhancer
+import android.os.Build
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.google.common.collect.ImmutableList
@@ -899,11 +899,37 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
 
                 // 2. Setup Dynamics Processing (DRC)
                 dynamicsProcessing?.release()
-                // Initialize with a standard base config
-                val baseConfig = createDRCConfig()
-                val dp = DynamicsProcessing(0, audioSessionId, baseConfig)
-                dynamicsProcessing = dp
-                applySoundMode(mode) // This will now apply specific band settings
+                
+                // SAFETY: Advanced audio effects (DynamicsProcessing/LoudnessEnhancer) 
+                // often cause silences or crashes in virtualized emulator environments.
+                val isEmulator = Build.FINGERPRINT.startsWith("generic") || 
+                               Build.FINGERPRINT.startsWith("unknown") ||
+                               Build.MODEL.contains("google_sdk") || 
+                               Build.MODEL.contains("Emulator") || 
+                               Build.MODEL.contains("Android SDK built for x86") ||
+                               Build.PRODUCT.contains("sdk_gphone") ||
+                               Build.PRODUCT.contains("vbox86p")
+                
+                if (isEmulator) {
+                    Log.i(TAG, "Emulator detected ($isEmulator). Bypassing Audio FX for sound compatibility.")
+                    dynamicsProcessing = null
+                    loudnessEnhancer = null
+                    enhancer.release()
+                    player?.volume = 1.0f 
+                } else {
+                    try {
+                        // Initialize hardware DRC
+                        val baseConfig = createDRCConfig()
+                        val dp = DynamicsProcessing(0, audioSessionId, baseConfig)
+                        dynamicsProcessing = dp
+                        applySoundMode(mode) 
+                        Log.i(TAG, "Hardware Dynamic Range Compression initialized for session $audioSessionId")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "DynamicsProcessing not supported: falling back to basic boost", e)
+                        dynamicsProcessing = null
+                        enhancer.enabled = targetGain > 0
+                    }
+                }
                 
                 Log.i(TAG, "Audio FX initialized for session $audioSessionId in $mode mode")
             } catch (e: Exception) {
