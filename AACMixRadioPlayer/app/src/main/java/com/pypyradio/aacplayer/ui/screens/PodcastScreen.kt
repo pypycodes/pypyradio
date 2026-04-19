@@ -27,6 +27,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.repo.PodcastRepository
@@ -94,6 +97,8 @@ fun PodcastScreen(
                         MediaMetadata.Builder()
                             .setTitle(ep.title)
                             .setArtist(ep.podcastTitle ?: ep.author)
+                            .setArtworkUri(ep.imageUrl?.let { android.net.Uri.parse(it) }
+                                ?: android.net.Uri.parse("android.resource://com.pypyradio.aacplayer/drawable/pypyradio_fallback_cover_art"))
                             .build()
                     )
                     .build()
@@ -111,10 +116,12 @@ fun PodcastScreen(
                         .build()
                 )
                 .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(episode.title)
-                        .setArtist(episode.podcastTitle ?: episode.author)
-                        .build()
+                        MediaMetadata.Builder()
+                            .setTitle(episode.title)
+                            .setArtist(episode.podcastTitle ?: episode.author)
+                            .setArtworkUri(episode.imageUrl?.let { android.net.Uri.parse(it) }
+                                ?: android.net.Uri.parse("android.resource://com.pypyradio.aacplayer/drawable/pypyradio_fallback_cover_art"))
+                            .build()
                 )
                 .build()
             player.setMediaItem(mediaItem)
@@ -372,7 +379,12 @@ private fun PodcastRow(
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 AsyncImage(
-                    model = podcast.imageUrl,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(podcast.imageUrl)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -484,7 +496,12 @@ private fun EpisodeRow(
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 AsyncImage(
-                    model = episode.imageUrl,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(episode.imageUrl)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize()
                 )

@@ -601,7 +601,12 @@ private fun StationRow(
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     AsyncImage(
-                        model = st.favicon, 
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(st.favicon)
+                            .crossfade(true)
+                            .error(R.drawable.pypyradio_fallback_cover_art)
+                            .fallback(R.drawable.pypyradio_fallback_cover_art)
+                            .build(),
                         contentDescription = null, 
                         modifier = Modifier.fillMaxSize().padding(4.dp)
                     )

@@ -22,6 +22,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import com.pypyradio.aacplayer.data.model.Station
@@ -90,7 +93,7 @@ fun FavoritesScreen(
         val cleanFavicon = station.favicon?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
         val artworkUri = cleanFavicon?.let {
             android.net.Uri.parse(it)
-        }
+        } ?: android.net.Uri.parse("android.resource://com.pypyradio.aacplayer/drawable/pypyradio_fallback_cover_art")
         return MediaItem.Builder()
             .setMediaId(station.stationuuid)
             .setUri(station.urlResolved)
@@ -200,6 +203,8 @@ fun FavoritesScreen(
                 MediaMetadata.Builder()
                     .setTitle(episode.title)
                     .setArtist(episode.podcastTitle ?: episode.author)
+                    .setArtworkUri(episode.imageUrl?.let { android.net.Uri.parse(it) }
+                        ?: android.net.Uri.parse("android.resource://com.pypyradio.aacplayer/drawable/pypyradio_fallback_cover_art"))
                     .build()
             )
             .build()
@@ -471,7 +476,16 @@ private fun FavStationRow(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                AsyncImage(model = st.favicon, contentDescription = null, modifier = Modifier.fillMaxSize().padding(4.dp))
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(st.favicon)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
+                    contentDescription = null, 
+                    modifier = Modifier.fillMaxSize().padding(4.dp)
+                )
                 
                 if (isFailed && !isActive) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
@@ -595,7 +609,16 @@ private fun FavPodcastRow(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                AsyncImage(model = podcast.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize())
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(podcast.imageUrl)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
+                    contentDescription = null, 
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -656,7 +679,16 @@ private fun FavEpisodeRow(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                AsyncImage(model = episode.imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize())
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(episode.imageUrl)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
+                    contentDescription = null, 
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
