@@ -36,6 +36,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.ui.vm.StationsViewModel
 import kotlinx.coroutines.delay

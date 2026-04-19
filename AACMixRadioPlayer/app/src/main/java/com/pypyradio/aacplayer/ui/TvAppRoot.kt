@@ -27,6 +27,8 @@ import com.pypyradio.aacplayer.data.model.Station
 import com.pypyradio.aacplayer.data.model.Podcast
 import com.pypyradio.aacplayer.data.model.PodcastEpisode
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.pypyradio.aacplayer.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
@@ -219,7 +221,12 @@ fun TvStationCard(station: Station, isCurrent: Boolean, isFavorite: Boolean, onC
         ) {
             Box(contentAlignment = Alignment.TopEnd) {
                 AsyncImage(
-                    model = station.favicon,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(station.favicon)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.size(64.dp).padding(bottom = 8.dp)
                 )
@@ -277,7 +284,12 @@ fun TvNowPlaying(
             modifier = Modifier.size(200.dp).padding(bottom = 24.dp)
         ) {
             AsyncImage(
-                model = metadata?.artworkUri ?: metadata?.artworkData,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(metadata?.artworkUri ?: metadata?.artworkData)
+                    .crossfade(true)
+                    .error(R.drawable.pypyradio_fallback_cover_art)
+                    .fallback(R.drawable.pypyradio_fallback_cover_art)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
@@ -482,7 +494,12 @@ fun TvPodcastCard(podcast: Podcast, onClick: () -> Unit) {
             verticalArrangement = Arrangement.Center
         ) {
             AsyncImage(
-                model = podcast.imageUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(podcast.imageUrl)
+                    .crossfade(true)
+                    .error(R.drawable.pypyradio_fallback_cover_art)
+                    .fallback(R.drawable.pypyradio_fallback_cover_art)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.size(64.dp).padding(bottom = 8.dp)
             )

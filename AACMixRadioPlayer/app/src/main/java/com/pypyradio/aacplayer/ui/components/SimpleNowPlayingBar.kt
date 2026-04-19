@@ -39,6 +39,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.pypyradio.aacplayer.R
 import kotlinx.coroutines.delay
 
 @Composable
@@ -237,23 +240,17 @@ fun SimpleNowPlayingBar(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
                     ) {
-                        if (artworkUrl != null) {
-                            AsyncImage(
-                                model = artworkUrl,
-                                contentDescription = "Now playing artwork",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Radio,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(artworkUrl)
+                                .crossfade(true)
+                                .error(R.drawable.pypyradio_fallback_cover_art)
+                                .fallback(R.drawable.pypyradio_fallback_cover_art)
+                                .build(),
+                            contentDescription = "Now playing artwork",
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop
+                        )
                     }
                 }
                 
