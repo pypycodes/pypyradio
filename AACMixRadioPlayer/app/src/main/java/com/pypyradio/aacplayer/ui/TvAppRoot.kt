@@ -119,15 +119,16 @@ fun TvAppRoot(
     MaterialTheme(
         colorScheme = TvPremiumPalette
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = RectangleShape
-        ) {
-            if (isConnecting) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Connecting to Radio Service...")
-                }
-            } else {
+        CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color.White) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = RectangleShape
+            ) {
+                if (isConnecting) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Connecting to Radio Service...", color = Color.White)
+                    }
+                } else {
                 Row(Modifier.fillMaxSize()) {
                     // Left Panel: Now Playing
                     Box(
@@ -176,7 +177,8 @@ fun TvAppRoot(
                                     Text(
                                         title,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.labelLarge
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (selectedTabIndex == index) Color.White else Color.White.copy(alpha = 0.6f)
                                     )
                                 }
                             }
@@ -192,6 +194,7 @@ fun TvAppRoot(
             }
         }
     }
+}
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -232,6 +235,7 @@ fun TvStationCard(station: Station, isCurrent: Boolean, isFavorite: Boolean, onC
             Text(
                 station.name,
                 style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -282,13 +286,14 @@ fun TvNowPlaying(
         Text(
             metadata?.title?.toString() ?: "Select a Station",
             style = MaterialTheme.typography.headlineLarge,
+            color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             metadata?.artist?.toString() ?: "PyPy Radio",
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.7f)
         )
         
         Spacer(Modifier.height(16.dp))
@@ -396,10 +401,10 @@ fun TvPodcastSection(pvm: PodcastViewModel, controller: Player?) {
             // Show episodes
             Column {
                 Button(onClick = { pvm.backToPodcasts() }) {
-                    Text("Back to Search")
+                    Text("Back to Search", color = Color.White)
                 }
                 Spacer(Modifier.height(16.dp))
-                Text(state.selectedPodcast?.title ?: "Episodes", style = MaterialTheme.typography.titleLarge)
+                Text(state.selectedPodcast?.title ?: "Episodes", style = MaterialTheme.typography.titleLarge, color = Color.White)
                 Spacer(Modifier.height(8.dp))
                 
                 TvLazyVerticalGrid(
@@ -439,7 +444,7 @@ fun TvFavoritesSection(vm: StationsViewModel, pvm: PodcastViewModel, currentMedi
         ) {
             if (favorites.isNotEmpty()) {
                 item(span = { TvGridItemSpan(3) }) {
-                    Text("Favorite Radio Stations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp, top = 16.dp))
+                    Text("Favorite Radio Stations", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.padding(bottom = 8.dp, top = 16.dp))
                 }
                 items(favorites, key = { it.stationuuid }) { station ->
                     TvStationCard(
@@ -453,7 +458,7 @@ fun TvFavoritesSection(vm: StationsViewModel, pvm: PodcastViewModel, currentMedi
             
             if (pFavorites.isNotEmpty()) {
                 item(span = { TvGridItemSpan(3) }) {
-                    Text("Favorite Podcasts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp, top = 24.dp))
+                    Text("Favorite Podcasts", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.padding(bottom = 8.dp, top = 24.dp))
                 }
                 items(pFavorites, key = { it.id }) { podcast ->
                     TvPodcastCard(podcast = podcast, onClick = { pvm.loadEpisodes(podcast) })
@@ -484,6 +489,7 @@ fun TvPodcastCard(podcast: Podcast, onClick: () -> Unit) {
             Text(
                 podcast.title,
                 style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
