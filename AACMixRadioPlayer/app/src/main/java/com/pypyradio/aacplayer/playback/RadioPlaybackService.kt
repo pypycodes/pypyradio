@@ -736,9 +736,11 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(station.name.take(100))
-                        .setArtist(station.countryCode?.take(10) ?: "Unknown")
+                        .setArtist(station.countryCode?.take(10) ?: "Radio")
                         .setGenre(station.tags?.take(50) ?: "Radio")
                         .setAlbumTitle(station.language?.take(50)?.let { "$it Radio" } ?: "Radio")
+                        .setArtworkUri(station.favicon?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) } 
+                            ?: android.net.Uri.parse("android.resource://${packageName}/drawable/pypyradio_fallback_cover_art"))
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
                         .build()
@@ -758,8 +760,10 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(episode.title)
-                    .setArtist(episode.podcastTitle ?: "")
+                    .setArtist(episode.podcastTitle ?: "Podcast")
                     .setGenre("Podcast")
+                    .setArtworkUri(episode.imageUrl?.takeIf { it.isNotBlank() }?.let { android.net.Uri.parse(it) }
+                        ?: android.net.Uri.parse("android.resource://${packageName}/drawable/pypyradio_fallback_cover_art"))
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .build()
