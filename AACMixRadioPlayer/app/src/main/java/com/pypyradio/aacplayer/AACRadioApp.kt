@@ -1,6 +1,7 @@
 package com.pypyradio.aacplayer
 
 import android.app.Application
+import com.google.android.gms.security.ProviderInstaller
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -9,6 +10,13 @@ import coil.memory.MemoryCache
 class AACRadioApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        
+        // Update security provider for SSL fixes on old Android versions
+        try {
+            ProviderInstaller.installIfNeeded(this)
+        } catch (e: Exception) {
+            // Log or ignore if Play Services are missing/outdated
+        }
     }
 
     override fun newImageLoader(): ImageLoader {

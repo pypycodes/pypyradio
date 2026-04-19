@@ -58,15 +58,22 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
             } catch (_: Exception) { }
         }
         
-        // Tier 2: iTunes "top" search
-        val itunesTop = searchITunesPodcasts("top podcast", limit)
-        if (itunesTop.isNotEmpty()) return itunesTop
-        
-        // Tier 3: Guaranteed final fallback (common categories)
-        val finalFallback = searchITunesPodcasts("news", limit / 2) + 
-                            searchITunesPodcasts("popular", limit / 2)
+        try {
+            // Tier 2: iTunes "top" search
+            val itunesTop = searchITunesPodcasts("top podcast", limit)
+            if (itunesTop.isNotEmpty()) return itunesTop
+            
+            // Tier 3: Guaranteed final fallback (common categories)
+            val finalFallback = searchITunesPodcasts("news", limit / 2) + 
+                                searchITunesPodcasts("popular", limit / 2)
+            if (finalFallback.isNotEmpty()) {
+                return finalFallback.shuffled().take(limit)
+            }
+        } catch (_: Exception) {
+            // If even iTunes fails (usually SSL issue), return whatever we have (empty)
+        }
                             
-        return finalFallback.shuffled().take(limit)
+        return emptyList()
     }
     
     /**
