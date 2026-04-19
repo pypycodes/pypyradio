@@ -27,8 +27,8 @@ android {
         applicationId = "com.pypyradio.aacplayer"
         minSdk = 24
         targetSdk = 35
-        versionCode = 142
-        versionName = "2.3.29"
+        versionCode = 143
+        versionName = "2.3.30"
     }
 
     signingConfigs {
@@ -131,6 +131,9 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+
+    // Google Play Services for updating security provider (SSL fixes)
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
 
     // Core
     implementation("androidx.core:core-ktx:1.12.0")

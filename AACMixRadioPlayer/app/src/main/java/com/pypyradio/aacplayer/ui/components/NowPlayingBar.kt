@@ -25,6 +25,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.pypyradio.aacplayer.R
 import com.pypyradio.aacplayer.playback.RadioController
 
 enum class PlaybackState {
@@ -43,6 +46,7 @@ fun NowPlayingBar() {
     var hasPrevious by remember { mutableStateOf(false) }
     var currentIndex by remember { mutableStateOf(0) }
     var totalCount by remember { mutableStateOf(0) }
+    var artworkUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
     LaunchedEffect(Unit) {
         controller = RadioController.get(context)
@@ -56,6 +60,7 @@ fun NowPlayingBar() {
                 isMuted = player.volume == 0f
                 hasNext = player.hasNextMediaItem()
                 hasPrevious = player.hasPreviousMediaItem()
+                artworkUri = player.currentMediaItem?.mediaMetadata?.artworkUri
                 currentIndex = player.currentMediaItemIndex + 1
                 totalCount = player.mediaItemCount
                 
@@ -76,6 +81,7 @@ fun NowPlayingBar() {
         isMuted = c.volume == 0f
         hasNext = c.hasNextMediaItem()
         hasPrevious = c.hasPreviousMediaItem()
+        artworkUri = c.currentMediaItem?.mediaMetadata?.artworkUri
         currentIndex = c.currentMediaItemIndex + 1
         totalCount = c.mediaItemCount
         playbackState = when {
@@ -119,8 +125,21 @@ fun NowPlayingBar() {
                 // Animated status indicator
                 StatusIndicator(playbackState = playbackState, color = statusColor)
                 
-                Spacer(Modifier.width(12.dp))
+                // Branded Logo Thumbnail
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(artworkUri)
+                        .crossfade(true)
+                        .error(R.drawable.pypyradio_fallback_cover_art)
+                        .fallback(R.drawable.pypyradio_fallback_cover_art)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
                 
+                Spacer(Modifier.width(12.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     // Status text
                     Text(

@@ -47,7 +47,13 @@ class PodcastViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(loading = true, error = null, showingEpisodes = false, selectedPodcast = null)
         runCatching { repo.getTrendingPodcasts(50) }
             .onSuccess { _state.value = _state.value.copy(loading = false, podcasts = it, error = null) }
-            .onFailure { _state.value = _state.value.copy(loading = false, podcasts = emptyList(), error = it.message ?: "Failed to load") }
+            .onFailure { error ->
+                val msg = error.message ?: "Failed to load"
+                val friendlyMsg = if (msg.contains("Chain validation failed", ignoreCase = true)) {
+                    "Security error (Chain Validation). Please check if your TV's Date & Time are correct."
+                } else msg
+                _state.value = _state.value.copy(loading = false, podcasts = emptyList(), error = friendlyMsg)
+            }
     }
     
     fun refresh() {
@@ -68,7 +74,13 @@ class PodcastViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(loading = true, error = null, showingEpisodes = false, selectedPodcast = null)
         runCatching { repo.searchAllPodcasts(q, 50) }
             .onSuccess { _state.value = _state.value.copy(loading = false, podcasts = it, error = null) }
-            .onFailure { _state.value = _state.value.copy(loading = false, podcasts = emptyList(), error = it.message ?: "Failed to search") }
+            .onFailure { error ->
+                val msg = error.message ?: "Failed to search"
+                val friendlyMsg = if (msg.contains("Chain validation failed", ignoreCase = true)) {
+                    "Security error. Please check if your TV's Date & Time are correct."
+                } else msg
+                _state.value = _state.value.copy(loading = false, podcasts = emptyList(), error = friendlyMsg)
+            }
     }
     
     fun searchByCategory(category: String) = viewModelScope.launch {
@@ -91,7 +103,13 @@ class PodcastViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(loading = true, error = null, showingEpisodes = true, selectedPodcast = podcast)
         runCatching { repo.getEpisodes(podcast, 50) }
             .onSuccess { _state.value = _state.value.copy(loading = false, episodes = it, error = null) }
-            .onFailure { _state.value = _state.value.copy(loading = false, episodes = emptyList(), error = it.message ?: "Failed to load episodes") }
+            .onFailure { error ->
+                val msg = error.message ?: "Failed to load episodes"
+                val friendlyMsg = if (msg.contains("Chain validation failed", ignoreCase = true)) {
+                    "Security error. Please check if your TV's Date & Time are correct."
+                } else msg
+                _state.value = _state.value.copy(loading = false, episodes = emptyList(), error = friendlyMsg)
+            }
     }
     
     fun backToPodcasts() {

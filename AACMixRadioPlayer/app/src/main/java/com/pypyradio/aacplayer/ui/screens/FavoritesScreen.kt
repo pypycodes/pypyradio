@@ -616,8 +616,8 @@ private fun FavPodcastRow(
                         .error(R.drawable.pypyradio_fallback_cover_art)
                         .fallback(R.drawable.pypyradio_fallback_cover_art)
                         .build(),
-                    contentDescription = null, 
-                    modifier = Modifier.fillMaxSize()
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(4.dp)
                 )
             }
             Spacer(Modifier.width(12.dp))
