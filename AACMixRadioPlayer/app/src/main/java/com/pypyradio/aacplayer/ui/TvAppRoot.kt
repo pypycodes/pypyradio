@@ -41,8 +41,16 @@ import androidx.media3.common.MediaMetadata
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -351,15 +359,22 @@ fun TvRadioSection(vm: StationsViewModel, currentMediaId: String?, controller: P
     val favorites by vm.favorites.collectAsState()
     
     Column {
-        TextField(
-            value = state.query,
-            onValueChange = { vm.setQuery(it); vm.search() },
-            placeholder = { Text("Search Radio Stations...") },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+        TvSearchBar(
+            query = state.query,
+            onQueryChange = { vm.setQuery(it); vm.search() },
+            placeholder = "Search Radio Stations...",
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         )
+        
+        if (state.loading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (state.stations.isEmpty() && state.error == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No stations found. Try a different search.", color = Color.White.copy(alpha = 0.5f))
+            }
+        }
         
         val stations = state.stations.filter { it.urlResolved.isNotBlank() }
         
@@ -389,15 +404,22 @@ fun TvPodcastSection(pvm: PodcastViewModel, controller: Player?) {
     
     Column {
         if (!state.showingEpisodes) {
-            TextField(
-                value = state.query,
-                onValueChange = { pvm.setQuery(it); pvm.search() },
-                placeholder = { Text("Search Podcasts...") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+            TvSearchBar(
+                query = state.query,
+                onQueryChange = { pvm.setQuery(it); pvm.search() },
+                placeholder = "Search Podcasts...",
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             )
+            
+            if (state.loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (state.podcasts.isEmpty() && state.error == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No podcasts found. Check your connection.", color = Color.White.copy(alpha = 0.5f))
+                }
+            }
             
             TvLazyVerticalGrid(
                 columns = TvGridCells.Fixed(3),
@@ -510,6 +532,84 @@ fun TvPodcastCard(podcast: Podcast, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun TvSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        if (!expanded) {
+            Surface(
+                onClick = { expanded = true },
+                shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        Icons.Default.Search, 
+                        contentDescription = "Open Search",
+                        tint = Color.White
+                    )
+                }
+            }
+            if (query.isNotEmpty()) {
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    "Searching: $query", 
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(16.dp))
+                }
+            }
+        } else {
+            val focusRequester = remember { FocusRequester() }
+            
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text(placeholder) },
+                modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                leadingIcon = { 
+                    IconButton(onClick = { expanded = false }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Close Search")
+                    }
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { expanded = false })
+            )
+            
+            LaunchedEffect(expanded) {
+                if (expanded) focusRequester.requestFocus()
+            }
         }
     }
 }

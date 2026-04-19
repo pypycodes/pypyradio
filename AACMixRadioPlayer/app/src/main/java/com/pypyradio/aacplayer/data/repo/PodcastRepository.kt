@@ -59,7 +59,11 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
         }
         
         // Fallback to iTunes popular podcasts
-        return searchITunesPodcasts("top podcast", limit)
+        val itunesPopular = searchITunesPodcasts("top podcast", limit)
+        if (itunesPopular.isNotEmpty()) return itunesPopular
+        
+        // Final effort: search for generic "popular" if nothing else worked
+        return searchITunesPodcasts("popular podcast", limit)
     }
     
     /**
