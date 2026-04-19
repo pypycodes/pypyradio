@@ -155,24 +155,25 @@ class RadioPlaybackService : MediaLibraryService() {
             // Define browser-like User-Agent to prevent radio servers from blocking the player.
             // Matching the User-Agent used in StationsViewModel health checks.
             // Standard mobile identity for maximum stream compatibility
-            val userAgent = "ExoPlayer/2.0 (AACMixRadioPlayer)"
+            val userAgent = "Mozilla/5.0 (Android 14; Mobile; rv:115.0) Gecko/115.0 Firefox/115.0"
             val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent(userAgent)
-                .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(15_000)
-                .setReadTimeoutMs(15_000)
+                .setReadTimeoutMs(20_000)
+                .setAllowCrossProtocolRedirects(true)
 
             player = ExoPlayer.Builder(this)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory))
                 .setLoadControl(loadControl)
                 .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .setUsage(C.USAGE_MEDIA)
+                    androidx.media3.common.AudioAttributes.Builder()
+                        .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .setUsage(androidx.media3.common.C.USAGE_MEDIA)
                         .build(),
                     true
                 )
                 .setHandleAudioBecomingNoisy(true)
+                .setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
                 .build()
             
             // Add player listener for error handling
@@ -804,6 +805,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
                         player?.volume = 1.0f
                     }
                     
+                    // CRITICAL: Ensure Sound Modes are active for the current session
+                    applySoundMode(prefs.getSoundMode())
+                    
                     // Reset failed stations on successful playback
                     val currentMediaId = player?.currentMediaItem?.mediaId
                     if (currentMediaId != null) {
@@ -888,59 +892,64 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
 
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             super.onAudioSessionIdChanged(audioSessionId)
-            try {
-                // 1. Setup Loudness Enhancer
-                loudnessEnhancer?.release()
-                val enhancer = LoudnessEnhancer(audioSessionId)
-                val mode = prefs.getSoundMode()
-                val targetGain = when(mode) {
-                    com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> 400
-                    com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> 100
-                    com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0
-                    else -> 150
-                }
-                enhancer.setTargetGain(targetGain)
-                enhancer.enabled = targetGain > 0
-                loudnessEnhancer = enhancer
+            reInitAudioEffects(audioSessionId)
+        }
+    }
 
-                // 2. Setup Dynamics Processing (DRC)
-                dynamicsProcessing?.release()
-                
-                // SAFETY: Advanced audio effects (DynamicsProcessing/LoudnessEnhancer) 
-                // often cause silences or crashes in virtualized emulator environments.
-                val isEmulator = Build.FINGERPRINT.startsWith("generic") || 
-                               Build.FINGERPRINT.startsWith("unknown") ||
-                               Build.MODEL.contains("google_sdk") || 
-                               Build.MODEL.contains("Emulator") || 
-                               Build.MODEL.contains("Android SDK built for x86") ||
-                               Build.PRODUCT.contains("sdk_gphone") ||
-                               Build.PRODUCT.contains("vbox86p")
-                
-                if (isEmulator) {
-                    Log.i(TAG, "Emulator detected ($isEmulator). Bypassing Audio FX for sound compatibility.")
-                    dynamicsProcessing = null
-                    loudnessEnhancer = null
-                    enhancer.release()
-                    player?.volume = 1.0f 
-                } else {
-                    try {
-                        // Initialize hardware DRC
-                        val baseConfig = createDRCConfig()
-                        val dp = DynamicsProcessing(0, audioSessionId, baseConfig)
-                        dynamicsProcessing = dp
-                        applySoundMode(mode) 
-                        Log.i(TAG, "Hardware Dynamic Range Compression initialized for session $audioSessionId")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "DynamicsProcessing not supported: falling back to basic boost", e)
-                        dynamicsProcessing = null
-                        enhancer.enabled = targetGain > 0
-                    }
-                }
-                
-                Log.i(TAG, "Audio FX initialized for session $audioSessionId in $mode mode")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to initialize Audio FX", e)
+    private fun reInitAudioEffects(audioSessionId: Int) {
+        try {
+            // 1. Setup Loudness Enhancer
+            currentAudioSessionId = audioSessionId
+            loudnessEnhancer?.release()
+            val enhancer = LoudnessEnhancer(audioSessionId)
+            val mode = prefs.getSoundMode()
+            val targetGain = when(mode) {
+                com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> 800
+                com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> 300
+                com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> 0
+                else -> 150
             }
+            enhancer.setTargetGain(targetGain)
+            enhancer.enabled = targetGain > 0
+            loudnessEnhancer = enhancer
+
+            // 2. Setup Dynamics Processing (DRC)
+            dynamicsProcessing?.release()
+            
+            // SAFETY: Advanced audio effects (DynamicsProcessing/LoudnessEnhancer) 
+            // often cause silences or crashes in virtualized emulator environments.
+            val isEmulator = Build.FINGERPRINT.startsWith("generic") || 
+                           Build.FINGERPRINT.startsWith("unknown") ||
+                           Build.MODEL.contains("google_sdk") || 
+                           Build.MODEL.contains("Emulator") || 
+                           Build.MODEL.contains("Android SDK built for x86") ||
+                           Build.PRODUCT.contains("sdk_gphone") ||
+                           Build.PRODUCT.contains("vbox86p")
+            
+            if (isEmulator) {
+                Log.i(TAG, "Emulator detected ($isEmulator). Bypassing Audio FX for sound compatibility.")
+                dynamicsProcessing = null
+                loudnessEnhancer = null
+                enhancer.release()
+                player?.volume = 1.0f 
+            } else {
+                try {
+                    // Initialize hardware DRC
+                    val baseConfig = createDRCConfig()
+                    val dp = DynamicsProcessing(0, audioSessionId, baseConfig)
+                    dynamicsProcessing = dp
+                    applySoundMode(mode) 
+                    Log.i(TAG, "Hardware Dynamic Range Compression initialized for session $audioSessionId")
+                } catch (e: Exception) {
+                    Log.w(TAG, "DynamicsProcessing not supported: falling back to basic boost", e)
+                    dynamicsProcessing = null
+                    enhancer.enabled = targetGain > 0
+                }
+            }
+            
+            Log.i(TAG, "Audio FX initialized for session $audioSessionId in $mode mode")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to initialize Audio FX", e)
         }
     }
     
@@ -984,10 +993,21 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         }
     }
     
+    private var currentAudioSessionId: Int = -1
+
     private fun applySoundMode(mode: com.pypyradio.aacplayer.data.prefs.SoundMode) {
         val p = player ?: return
         p.volume = 1.0f // Maintain healthy signal for DRC
         
+        // SESSION WATCHDOG: If the player's current audio session ID doesn't match 
+        // our initialized effects, we must re-bind everything immediately or the mode "does nothing".
+        val activeSid = p.audioSessionId
+        if (activeSid != 0 && activeSid != currentAudioSessionId) {
+            Log.i(TAG, "Audio Session mismatch ($activeSid vs $currentAudioSessionId). Re-initializing effects for mode: $mode")
+            reInitAudioEffects(activeSid)
+            return // reInitAudioEffects handles the application
+        }
+
         // Apply DynamicsProcessing settings in real-time
         try {
             dynamicsProcessing?.let { dp ->
@@ -1002,9 +1022,9 @@ wifiLock = wifiMgr?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "pypyra
         // Maintain LoudnessEnhancer fallback
         when (mode) {
             com.pypyradio.aacplayer.data.prefs.SoundMode.DEFAULT -> updateLoudnessBoost(150) 
-            com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> updateLoudnessBoost(100)
+            com.pypyradio.aacplayer.data.prefs.SoundMode.STUDY -> updateLoudnessBoost(300)
             com.pypyradio.aacplayer.data.prefs.SoundMode.NIGHT -> updateLoudnessBoost(0)
-            com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> updateLoudnessBoost(400)
+            com.pypyradio.aacplayer.data.prefs.SoundMode.LOUD -> updateLoudnessBoost(800)
         }
     }
 

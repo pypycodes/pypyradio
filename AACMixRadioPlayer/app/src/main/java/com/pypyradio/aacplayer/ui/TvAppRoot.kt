@@ -80,6 +80,8 @@ fun TvAppRoot(
     // Track playback state
     var currentMediaId by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var playbackState by remember { mutableIntStateOf(Player.STATE_IDLE) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
     DisposableEffect(controller) {
         val ctrl = controller ?: return@DisposableEffect onDispose { }
@@ -87,6 +89,10 @@ fun TvAppRoot(
             override fun onEvents(player: Player, events: Player.Events) {
                 currentMediaId = player.currentMediaItem?.mediaId
                 isPlaying = player.isPlaying
+                playbackState = player.playbackState
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                errorMessage = error.localizedMessage
             }
         }
         ctrl.addListener(listener)
@@ -103,9 +109,11 @@ fun TvAppRoot(
         primary = Color(0xFF42A5F5), // Vibrant Blue Focus
         surface = Color(0xFF121212), // Deep Ebony background
         onSurface = Color.White,     // High contrast text
-        onSurfaceVariant = Color(0xFFCFD8DC), // Light gray subtitles
-        secondaryContainer = Color(0xFF263238), // Focused item background
-        primaryContainer = Color(0xFF1976D2)
+        onSurfaceVariant = Color(0xFFCFD8DC), // Gray text
+        secondaryContainer = Color(0xFF263238), // Focused surface
+        onSecondaryContainer = Color.White,     // White text on focus
+        primaryContainer = Color(0xFF1976D2),
+        onPrimaryContainer = Color.White
     )
 
     MaterialTheme(
@@ -132,6 +140,8 @@ fun TvAppRoot(
                         TvNowPlaying(
                             controller, 
                             isPlaying, 
+                            playbackState,
+                            errorMessage,
                             vm,
                             onToggleFavorite = { vm.toggleFavorite(it) }
                         )
@@ -192,7 +202,9 @@ fun TvStationCard(station: Station, isCurrent: Boolean, isFavorite: Boolean, onC
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = MaterialTheme.colorScheme.surface,
-            focusedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+            focusedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            focusedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
         ),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
         modifier = Modifier.aspectRatio(1f)
@@ -238,7 +250,9 @@ fun TvStationCard(station: Station, isCurrent: Boolean, isFavorite: Boolean, onC
 @Composable
 fun TvNowPlaying(
     player: Player?, 
-    isPlaying: Boolean, 
+    isPlaying: Boolean,
+    playbackState: Int,
+    errorMessage: String?,
     vm: StationsViewModel,
     onToggleFavorite: (Station) -> Unit
 ) {
@@ -247,8 +261,9 @@ fun TvNowPlaying(
     val state by vm.browse.collectAsState()
     val favorites by vm.favorites.collectAsState()
     
-    val currentStation = remember(mediaItem, state.stations) {
-        state.stations.find { it.stationuuid == mediaItem?.mediaId }
+    val currentStation = remember(mediaItem, state.stations, favorites) {
+        val id = mediaItem?.mediaId
+        state.stations.find { it.stationuuid == id } ?: favorites.find { it.stationuuid == id }
     }
     val isFavorite = favorites.any { it.stationuuid == currentStation?.stationuuid }
     
@@ -275,6 +290,15 @@ fun TvNowPlaying(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        
+        Spacer(Modifier.height(16.dp))
+        
+        if (playbackState == Player.STATE_BUFFERING) {
+            Text("Buffering...", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (errorMessage != null) {
+            Text("Error: $errorMessage", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+        }
         
         Spacer(Modifier.height(32.dp))
         
@@ -334,7 +358,7 @@ fun TvRadioSection(vm: StationsViewModel, currentMediaId: String?, controller: P
                     station = station,
                     isCurrent = station.stationuuid == currentMediaId,
                     isFavorite = isFavorite,
-                    onClick = { playStation(controller, station, stations) }
+                    onClick = { playStation(controller, station) }
                 )
             }
         }
@@ -422,7 +446,7 @@ fun TvFavoritesSection(vm: StationsViewModel, pvm: PodcastViewModel, currentMedi
                         station = station,
                         isCurrent = station.stationuuid == currentMediaId,
                         isFavorite = true,
-                        onClick = { playStation(controller, station, favorites) }
+                        onClick = { playStation(controller, station) }
                     )
                 }
             }
@@ -467,25 +491,24 @@ fun TvPodcastCard(podcast: Podcast, onClick: () -> Unit) {
     }
 }
 
-private fun playStation(player: Player?, st: Station, allStations: List<Station>) {
+private fun playStation(player: Player?, st: Station) {
     val ctrl = player ?: return
     
-    val mediaItems = allStations.map { station ->
-        MediaItem.Builder()
-            .setMediaId(station.stationuuid)
-            .setUri(station.urlResolved)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(station.name)
-                    .setArtist(station.countryCode ?: "Radio")
-                    .setArtworkUri(station.favicon?.let { android.net.Uri.parse(it) })
-                    .build()
-            )
-            .build()
-    }
-    
-    val index = allStations.indexOfFirst { it.stationuuid == st.stationuuid }.coerceAtLeast(0)
-    ctrl.setMediaItems(mediaItems, index, 0L)
+    // ATOMIC IPC: Send only ONE item to avoid Binder limitations on real TV hardware.
+    val mediaItem = MediaItem.Builder()
+        .setMediaId(st.stationuuid)
+        .setUri(st.urlResolved)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(st.name)
+                .setArtist(st.countryCode ?: "Radio")
+                .setArtworkUri(st.favicon?.let { android.net.Uri.parse(it) })
+                .build()
+        )
+        .build()
+
+    ctrl.setMediaItem(mediaItem)
+    ctrl.volume = 1.0f 
     ctrl.prepare()
     ctrl.play()
 }
@@ -505,6 +528,7 @@ private fun playPodcast(player: Player?, episode: PodcastEpisode) {
         .build()
     
     ctrl.setMediaItem(mediaItem)
+    ctrl.volume = 1.0f // Force volume on TV
     ctrl.prepare()
     ctrl.play()
 }
