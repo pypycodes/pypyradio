@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.pypyradio.aacplayer.R
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.ui.text.style.TextOverflow
@@ -402,6 +403,13 @@ fun TvRadioSection(vm: StationsViewModel, currentMediaId: String?, controller: P
 fun TvPodcastSection(pvm: PodcastViewModel, controller: Player?) {
     val state by pvm.state.collectAsState()
     
+    // Auto-load trending if empty
+    LaunchedEffect(Unit) {
+        if (state.podcasts.isEmpty() && !state.loading) {
+            pvm.loadTrending()
+        }
+    }
+    
     Column {
         if (!state.showingEpisodes) {
             TvSearchBar(
@@ -415,20 +423,30 @@ fun TvPodcastSection(pvm: PodcastViewModel, controller: Player?) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else if (state.podcasts.isEmpty() && state.error == null) {
+            } else if (state.error != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No podcasts found. Check your connection.", color = Color.White.copy(alpha = 0.5f))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Error: ${state.error}", color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { pvm.loadTrending() }) {
+                            Text("Retry", color = Color.White)
+                        }
+                    }
                 }
-            }
-            
-            TvLazyVerticalGrid(
-                columns = TvGridCells.Fixed(3),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(state.podcasts, key = { it.id }) { podcast ->
-                    TvPodcastCard(podcast = podcast, onClick = { pvm.loadEpisodes(podcast) })
+            } else if (state.podcasts.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No podcasts found. Try a search or check connection.", color = Color.White.copy(alpha = 0.5f))
+                }
+            } else {
+                TvLazyVerticalGrid(
+                    columns = TvGridCells.Fixed(3),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(state.podcasts, key = { it.id }) { podcast ->
+                        TvPodcastCard(podcast = podcast, onClick = { pvm.loadEpisodes(podcast) })
+                    }
                 }
             }
         } else {
@@ -592,7 +610,7 @@ fun TvSearchBar(
                 modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 leadingIcon = { 
                     IconButton(onClick = { expanded = false }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Close Search")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close Search")
                     }
                 },
                 trailingIcon = {

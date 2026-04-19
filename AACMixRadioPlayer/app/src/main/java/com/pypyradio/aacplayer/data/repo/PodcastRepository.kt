@@ -36,7 +36,7 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
      * Get trending podcasts - uses Podcast Index if configured, otherwise iTunes
      */
     suspend fun getTrendingPodcasts(limit: Int = 50): List<Podcast> {
-        // Try Podcast Index first if configured
+        // Tier 1: Podcast Index (if configured)
         if (PodcastClient.isPodcastIndexEnabled) {
             try {
                 val response = podcastIndexApi.getTrending(max = limit)
@@ -58,12 +58,15 @@ class PodcastRepository(private val favoritePodcastDao: FavoritePodcastDao? = nu
             } catch (_: Exception) { }
         }
         
-        // Fallback to iTunes popular podcasts
-        val itunesPopular = searchITunesPodcasts("top podcast", limit)
-        if (itunesPopular.isNotEmpty()) return itunesPopular
+        // Tier 2: iTunes "top" search
+        val itunesTop = searchITunesPodcasts("top podcast", limit)
+        if (itunesTop.isNotEmpty()) return itunesTop
         
-        // Final effort: search for generic "popular" if nothing else worked
-        return searchITunesPodcasts("popular podcast", limit)
+        // Tier 3: Guaranteed final fallback (common categories)
+        val finalFallback = searchITunesPodcasts("news", limit / 2) + 
+                            searchITunesPodcasts("popular", limit / 2)
+                            
+        return finalFallback.shuffled().take(limit)
     }
     
     /**
